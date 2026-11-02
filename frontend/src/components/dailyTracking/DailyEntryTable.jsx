@@ -119,6 +119,7 @@ export default function DailyEntryTable({ kind, channelKey, days, data, onCellCh
   return (
     <div className="dt-table-wrap">
       {header}
+      <div className="dt-table-scroll">
       <table className={`dt-table is-${kind}`} ref={tableRef}>
         <colgroup>
           <col className="dt-col-date" />
@@ -227,6 +228,7 @@ export default function DailyEntryTable({ kind, channelKey, days, data, onCellCh
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
   );
 }
