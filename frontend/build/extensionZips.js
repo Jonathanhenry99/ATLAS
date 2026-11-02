@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 // dev), so the zip is never committed and never lags behind the code.
 //
 //   import extensions from 'virtual:atlas-extensions'
-//   -> [{ id, name, version, description, file, bytes, files }]
+//   -> [{ id, name, version, description, permissions, sites, file, bytes, files }]
 //
 // The zip is written here with Node's zlib (deflate) — no archive
 // dependency. Its single top folder is the extension's id, ready for
@@ -107,6 +107,7 @@ export function readExtensions() {
         version: manifest.version,
         description: manifest.description ?? '',
         permissions: [...(manifest.permissions ?? []), ...(manifest.host_permissions ?? [])],
+        sites: [...new Set((manifest.content_scripts ?? []).flatMap((c) => c.matches ?? []))],
         file,
         bytes: buffer.length,
         files: files.length,

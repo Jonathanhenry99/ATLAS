@@ -4,15 +4,9 @@ Chrome extension (Manifest V3) untuk Google Reviews Analytics di ATLAS. Extensio
 
 Alur V1: **Google Maps → extension → CSV → ATLAS › Google Reviews › Import CSV → analisis AI → dashboard.** Extension tidak mengirim apa pun ke ATLAS atau server lain; file CSV diunggah sendiri oleh pengguna.
 
-## Memasang (unpacked, untuk tim internal)
+## Memasang
 
-1. Buka `chrome://extensions` di Google Chrome.
-2. Aktifkan **Developer mode** (pojok kanan atas).
-3. Klik **Load unpacked**, lalu pilih folder `extensions/google-reviews-exporter` dari repo ATLAS.
-4. Sematkan ikon ATLAS di toolbar (ikon puzzle → pin).
-5. Jika tab Google Maps sudah terbuka sebelum extension dipasang, muat ulang tab itu sekali.
-
-Pembaruan: tarik versi terbaru repo, lalu klik ikon ↻ pada kartu extension di `chrome://extensions`.
+Ikuti **Cara install extension** di halaman ATLAS › Extensions (berlaku untuk semua extension ATLAS). Untuk pengembangan, pilih folder `extensions/google-reviews-exporter` dari repo saat **Load unpacked**. Jika tab Google Maps sudah terbuka sebelum extension dipasang, muat ulang tab itu sekali.
 
 ## Memakai
 
