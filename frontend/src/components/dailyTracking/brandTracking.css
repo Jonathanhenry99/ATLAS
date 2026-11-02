@@ -425,10 +425,11 @@
 
 /* The day-by-day sheet. Fixed columns sized to their numbers (no column
    stretches to fill the width), right-aligned figures, horizontal rules only,
-   one tint for weekends. overflow:clip keeps the rounded corners without
-   becoming a scroll container, so the header and the total row can stick to
-   the page while the days scroll between them. */
+   one tint for weekends. The wrap clips to the rounded corners; the sheet
+   scrolls in its own box both ways, so columns wider than the panel stay
+   reachable while the header, the total row and the date column stick. */
 .bt-page .dt-table-wrap { overflow: clip; border: 1px solid var(--soft-border); border-radius: 14px; background: #fff; }
+.bt-page .dt-table-scroll { overflow: auto; max-height: max(360px, calc(100vh - 220px)); overscroll-behavior-x: contain; }
 .bt-page .dt-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: .86rem; }
 .bt-page .dt-col-date { width: 168px; }
 .bt-page .dt-col-money { width: 190px; }
@@ -437,6 +438,8 @@
 .bt-page .dt-col-source { width: 150px; }
 .bt-page .dt-table th, .bt-page .dt-table td { text-align: left; }
 .bt-page .dt-table .is-num { text-align: right; }
+.bt-page .dt-table :where(tr > :first-child) { position: sticky; left: 0; z-index: 2; background: #fff; }
+.bt-page .dt-table thead tr > :first-child, .bt-page .dt-table tfoot tr > :first-child { z-index: 4; }
 .bt-page .dt-table thead th {
   position: sticky; top: 0; z-index: 3;
   height: 38px; padding: 0 16px;
@@ -463,6 +466,7 @@
 .bt-page .dt-table tbody tr:last-child td { border-bottom: 0; }
 .bt-page .dt-table tbody tr[data-date]:hover td { background: #f8faff; }
 .bt-page .dt-table tbody tr.is-today td { background: rgba(14, 152, 176, .05); }
+.bt-page .dt-table tbody tr.is-today td.dt-table-date { background: #f3fafc; }
 .bt-page .dt-table tbody tr.is-flash td { animation: bt-flash 1.4s var(--bt-ease); }
 @keyframes bt-flash { 0%, 35% { background: rgba(40, 86, 182, .14); } }
 
