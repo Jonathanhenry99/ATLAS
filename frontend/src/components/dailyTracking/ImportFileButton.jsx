@@ -15,12 +15,15 @@ const KIND_TITLE = { sales: 'Revenue Data', spend: 'Spending Data', leads: 'Lead
 // anything (POST /import/preview) and every column it recognised is listed
 // with a checkbox — columns this brand ignored on an earlier upload start
 // unticked and are called out. 2) Only the ticked columns are saved
-// (POST /import with `selected`); the unticked ones are remembered.
+// (POST /import with `selected`); the unticked ones are remembered. A file
+// with more than one filled "Deal Leads" column also asks which one to keep
+// (`dealSource`) before Deal can be saved.
 export default function ImportFileButton({ brandId, onImported }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(null); // { file, data }
   const [checked, setChecked] = useState({});
+  const [dealSource, setDealSource] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
@@ -42,6 +45,7 @@ export default function ImportFileButton({ brandId, onImported }) {
     try {
       const res = await upload('/daily-tracking/import/preview', file);
       setChecked(Object.fromEntries(res.data.columns.map((c) => [c.id, !c.previouslyIgnored])));
+      setDealSource(null);
       setPreview({ file, data: res.data });
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Gagal membaca file');
@@ -55,7 +59,9 @@ export default function ImportFileButton({ brandId, onImported }) {
     setBusy(true);
     setError('');
     try {
-      const res = await upload('/daily-tracking/import', preview.file, { selected: JSON.stringify(selected) });
+      const extra = { selected: JSON.stringify(selected) };
+      if (needsDealChoice) extra.dealSource = dealSource;
+      const res = await upload('/daily-tracking/import', preview.file, extra);
       setResult(res.data);
       setPreview(null);
       onImported?.();
@@ -68,6 +74,8 @@ export default function ImportFileButton({ brandId, onImported }) {
 
   const columns = preview?.data.columns || [];
   const nChecked = columns.filter((c) => checked[c.id]).length;
+  const dealChoices = preview?.data.dealChoices || [];
+  const needsDealChoice = dealChoices.length > 1 && !!checked['leads:deals'];
   const setAll = (kind, value) => setChecked((prev) => ({
     ...prev, ...Object.fromEntries(columns.filter((c) => c.kind === kind).map((c) => [c.id, value])),
   }));
@@ -154,9 +162,30 @@ export default function ImportFileButton({ brandId, onImported }) {
                             <span className="dt-import-column-from">dari kolom “{c.fileLabels.join('”, “')}”</span>
                           )}
                         </span>
-                        <span className="dt-import-column-stat">{c.rows} hari · total {fmt(c.total)}</span>
+                        <span className="dt-import-column-stat">
+                          {c.id === 'leads:deals' && dealChoices.length > 1 ? 'pilih kolom di bawah' : `${c.rows} hari · total ${fmt(c.total)}`}
+                        </span>
                       </label>
                     ))}
+                    {kind === 'leads' && needsDealChoice && (
+                      <div className="alert alert-warning dt-import-deal-choice" role="radiogroup" aria-label="Pilih kolom Deal">
+                        <div>
+                          File ini punya {dealChoices.length} kolom Deal yang sama-sama terisi. Pilih kolom Deal mana yang ingin disimpan:
+                        </div>
+                        {dealChoices.map((d) => (
+                          <label key={d.source} className="dt-import-column">
+                            <input
+                              type="radio"
+                              name="deal-source"
+                              checked={dealSource === d.source}
+                              onChange={() => setDealSource(d.source)}
+                            />
+                            <span className="dt-import-column-name">“{d.label}” <span className="dt-import-column-from">kolom {d.letter}</span></span>
+                            <span className="dt-import-column-stat">{d.rows} hari · total {fmt(d.total)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </fieldset>
                 );
               })}
@@ -165,7 +194,7 @@ export default function ImportFileButton({ brandId, onImported }) {
             {error && <div className="alert alert-error">{error}</div>}
             <div className="dt-modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setPreview(null)} disabled={busy}>Batal</button>
-              <button type="button" className="btn btn-primary" onClick={handleImport} disabled={busy || nChecked === 0}>
+              <button type="button" className="btn btn-primary" onClick={handleImport} disabled={busy || nChecked === 0 || (needsDealChoice && dealSource == null)}>
                 {busy ? 'Menyimpan...' : `Simpan ${nChecked} kolom`}
               </button>
             </div>

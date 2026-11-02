@@ -30,3 +30,37 @@ test('Daily Tracking import: cold leads and deals become Leads Data, not ad chan
   assert.equal(byDate['2026-08-02'].deals, 1);
   assert.equal(p.leadRows.length, 4, 'the month Total row is not a day');
 });
+
+// Valentine's 2026 sheet has "Deal Leads " (the daily figures) and, further
+// right, a second "Deal Leads" that is only filled on month Total rows.
+test('Daily Tracking import: a duplicate, empty "Deal Leads" column does not hide the real one', () => {
+  const csv = [
+    ',No,Tanggal,Hari,Notes,FB Ads,Total Ads,Total Cold Leads,Deal Leads ,Deal Leads Region,Hot Leads Origin,Deal Leads,Keterangan',
+    ',1,1 January 2026,,,"Rp10,000","Rp10,000",8,0,,,,',
+    ',2,2 January 2026,,,"Rp10,000","Rp10,000",9,3,,instagram,,',
+    ',,,,Total,"Rp20,000","Rp20,000",17,3,,,3,',
+  ].join('\n');
+  const p = parseDailyTrackingFile(Buffer.from(csv), 'valentine-2026.csv');
+  const byDate = Object.fromEntries(p.leadRows.map((r) => [r.entryDate, r]));
+  assert.equal(byDate['2026-01-01'].deals, 0);
+  assert.equal(byDate['2026-01-02'].deals, 3);
+});
+
+// Two "Deal Leads" columns that both carry daily figures: the file is
+// ambiguous, so the choice is the user's (`dealSource`).
+test('Daily Tracking import: two filled "Deal Leads" columns are offered as a choice', () => {
+  const csv = [
+    ',No,Tanggal,Hari,Notes,FB Ads,Total Cold Leads,Deal Leads,Hot Leads Origin,Deal Leads',
+    ',1,1 January 2026,,,"Rp10,000",8,1,,4',
+    ',2,2 January 2026,,,"Rp10,000",9,2,,',
+  ].join('\n');
+  const p = parseDailyTrackingFile(Buffer.from(csv), 'two-deals.csv');
+  assert.equal(p.dealConflict, true);
+  assert.deepEqual(p.dealChoices.map((d) => [d.source, d.letter, d.rows, d.total]), [[0, 'H', 2, 3], [1, 'J', 1, 4]]);
+
+  const picked = parseDailyTrackingFile(Buffer.from(csv), 'two-deals.csv', { dealSource: 1 });
+  const byDate = Object.fromEntries(picked.leadRows.map((r) => [r.entryDate, r]));
+  assert.equal(byDate['2026-01-01'].deals, 4);
+  assert.equal(byDate['2026-01-02'].deals, null, 'the other column is not used as a fallback');
+  assert.deepEqual(byDate['2026-01-02'].fields, ['coldLeads']);
+});
