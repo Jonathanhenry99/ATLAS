@@ -30,3 +30,6 @@
   .ext-page .soft-frame { padding: 10px; border-radius: 22px; }
   .ext-card { padding: 16px; }
 }
+.ext-install h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+.ext-steps a { color: #1e3eb8; font-weight: 650; }
+.ext-grid h3 ~ .ext-privacy { margin-top: 14px; }
