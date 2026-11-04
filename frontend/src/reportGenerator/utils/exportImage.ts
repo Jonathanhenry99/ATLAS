@@ -179,11 +179,36 @@ function widenForScrolledContent(block: HTMLElement): void {
   }
 }
 
+// Tables are fitted to their data in the image (png-export, index.css), which
+// leaves a card made of tables wide and mostly empty. Such a card is narrowed
+// by the room every table leaves beside it, but no narrower than its heading
+// or MIN_FIT_WIDTH. A card with a chart or a side-by-side split keeps its
+// width: those are laid out for it.
+const MIN_FIT_WIDTH = 480;
+
+function narrowToTables(block: HTMLElement): void {
+  if (block.querySelector('canvas, .sec-split')) return;
+  const tables = Array.from(block.querySelectorAll<HTMLElement>('table')).filter((t) => t.getClientRects().length && !t.parentElement?.closest('table'));
+  if (!tables.length) return;
+  const room = Math.min(...tables.map((t) => {
+    const box = t.parentElement!;
+    const cs = getComputedStyle(box);
+    return box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - t.getBoundingClientRect().width;
+  }));
+  const width = block.getBoundingClientRect().width;
+  if (room < 24 || width - room < MIN_FIT_WIDTH) return;
+  block.style.maxWidth = 'none';
+  block.style.width = `${Math.ceil(width - room)}px`;
+  const heading = block.querySelector<HTMLElement>('.sec-heading');
+  const over = Math.max(heading ? heading.scrollWidth - heading.clientWidth : 0, block.scrollWidth - block.clientWidth);
+  if (over > 0) block.style.width = `${Math.ceil(width - room + over)}px`;
+}
+
 const settle = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
 // One section card as an image, as it looks on screen (2× for sharpness).
-// `part` narrows it to one piece of the card — Fundamental Analysis's table or
-// its Root Cause — with a little white margin around it.
+// `part` narrows it to one piece of the card — a table, a chart, a root cause —
+// with a little white margin around it.
 export async function downloadSectionPNG(block: HTMLElement, part?: { el: HTMLElement; name: string }): Promise<void> {
   const heading = block.querySelector('.sec-heading');
   const title = (heading?.childNodes[0]?.textContent || '').trim();
@@ -201,6 +226,7 @@ export async function downloadSectionPNG(block: HTMLElement, part?: { el: HTMLEl
     const { default: html2canvas } = await import('html2canvas');
     await settle();
     widenForScrolledContent(block);
+    if (!part) narrowToTables(block);
     await settle();
     const target = part?.el ?? block;
     const pad = part ? 20 : 0;
