@@ -18,6 +18,9 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import SearchField from '../components/common/SearchField.jsx';
 import MetaAdsAutoFetchPanel from '../components/brandSettings/MetaAdsAutoFetchPanel.jsx';
 import { BrandLogo } from '../reportGenerator/components/BrandLogo';
+import { readSpreadsheetFile } from '../reportGenerator/lib/xlsxUtils';
+import { parseProductMasterRows } from '../reportGenerator/lib/shopeeDeepDive';
+import { replaceProductMaster } from '../reportGenerator/features/reports/api';
 import { describeError } from '../components/brandSettings/describeError.js';
 import '../components/dashboard/console.css';
 import '../components/dashboard/softShell.css';
@@ -469,9 +472,19 @@ function DatasetRow({ platform, dataset, months, lookup, index, reduced, onPick,
         </button>
 
         {isReference
-          ? <span className="brand-cov is-ref" style={{ gridColumn: `span ${months.length}` }} title="File referensi tanpa periode">
-              {refFile ? refFile.original_filename : 'Tanpa periode — berlaku untuk semua bulan'}
-            </span>
+          ? (
+            <button
+              type="button"
+              className={`brand-cov is-ref ${refFile ? '' : 'is-ref-empty'} ${busyKey === fileKey(platform.id, dataset.channel, null) ? 'is-busy' : ''}`}
+              style={{ gridColumn: `span ${months.length}` }}
+              onClick={() => (refFile ? setOpen(true) : onPick(dataset, null))}
+              title={refFile ? 'File referensi tanpa periode (klik untuk melihat detail)' : 'Belum ada file referensi (klik untuk upload)'}
+            >
+              {busyKey === fileKey(platform.id, dataset.channel, null)
+                ? 'Mengunggah…'
+                : refFile ? refFile.original_filename : 'Tanpa periode — berlaku untuk semua bulan · klik untuk upload'}
+            </button>
+          )
           : months.map((month) => {
             const key = fileKey(platform.id, dataset.channel, month.key);
             const merged = mergeParts(lookup.get(key), month);
@@ -501,6 +514,11 @@ function DatasetRow({ platform, dataset, months, lookup, index, reduced, onPick,
                 : part.period_source === 'mismatch' ? '⚠ bulan lain' : 'snapshot'}
             </em>
           ))}
+          {isReference && !refFile && (
+            <button type="button" className="brand-ds-addpart" onClick={() => onPick(dataset, null)} title="Upload file referensi — berlaku untuk semua bulan">
+              <Plus size={12} /> file
+            </button>
+          )}
           {!isReference && !dataset.autoOnly && targetMonth && (
             <button
               type="button" className="brand-ds-addpart"
@@ -1031,7 +1049,9 @@ export default function BrandDataPage() {
       setNotice('Pilih brand terlebih dahulu sebelum mengunggah file.');
       return;
     }
-    pending.current = { dataset, month: focus ? months[0] : month, replaceFile };
+    // A reference file has no period: a focused month must not give it one.
+    const isReference = dataset.kind === 'reference';
+    pending.current = { dataset, month: isReference ? null : focus ? months[0] : month, replaceFile };
     fileInput.current.value = '';
     fileInput.current.click();
   };
@@ -1056,6 +1076,30 @@ export default function BrandDataPage() {
     const key = fileKey(marketId, target.dataset.channel, target.month?.key ?? null);
     setBusyKey(key);
     setNotice(null);
+    // Referensi Kategori Produk is what the reports categorise products by
+    // (product_master), not just a file to keep: it is read before upload, so
+    // a file without a name and a Category column is turned away, and the
+    // mapping is replaced once the file is stored.
+    let mapping = null;
+    if (target.dataset.channel === 'product_master') {
+      try {
+        const parsed = parseProductMasterRows(await readSpreadsheetFile(picked[0]));
+        if (!parsed.entries.length) {
+          setNotice({ tone: 'error', text: parsed.nameColumn && parsed.categoryColumn
+            ? `Tidak diunggah: ${picked[0].name} terbaca, tetapi tidak ada baris yang valid (nama produk + Category harus terisi).`
+            : `Tidak diunggah: ${picked[0].name} butuh minimal satu kolom nama produk (mis. "Nama Iklan") dan satu kolom Category/Kategori.` });
+          setBusyKey(null);
+          pending.current = null;
+          return;
+        }
+        mapping = parsed.entries;
+      } catch (err) {
+        setNotice({ tone: 'error', text: `Tidak diunggah: gagal membaca ${picked[0].name} — ${err.message}` });
+        setBusyKey(null);
+        pending.current = null;
+        return;
+      }
+    }
     try {
       const form = new FormData();
       // One field name, several files: a split month is filed in one action.
@@ -1086,6 +1130,15 @@ export default function BrandDataPage() {
       // dashboard's zeros unexplained.
       if (data.imported?.rowsInserted) parts.push(`${data.imported.rowsInserted.toLocaleString('id-ID')} baris masuk ke Dashboard`);
       if (data.imported?.errors?.length) parts.push(`gagal masuk ke Dashboard: ${data.imported.errors.join('; ')}`);
+      if (mapping) {
+        try {
+          const stored = await replaceProductMaster(brand.brand_id, mapping);
+          parts.splice(0, parts.length, `${stored.length.toLocaleString('id-ID')} produk terpetakan ke Category / Series dan dipakai di seluruh laporan`);
+        } catch (err) {
+          setNotice({ tone: 'error', text: `${target.dataset.name} tersimpan, tetapi pemetaan kategorinya gagal dipasang: ${err.message}. Klik "Ganti" dan unggah ulang file yang sama.` });
+          return;
+        }
+      }
       setNotice({ tone: data.imported?.errors?.length ? 'error' : 'ok', text: `${where} ${target.replaceFile ? 'diganti' : 'tersimpan'} — ${parts.join(' · ').replace(/\.+$/, '')}.` });
     } catch (err) {
       const names = picked.map((f) => f.name).join(', ');

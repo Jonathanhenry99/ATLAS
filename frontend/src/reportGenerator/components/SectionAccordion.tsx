@@ -61,7 +61,8 @@ function readMeta(wrap: HTMLElement | null, fallback: string): SectionMeta {
   const head = wrap?.querySelector<HTMLElement>('.sec-heading');
   if (!head) return { title: fallback, badge: '' };
   const title = Array.from(head.childNodes)
-    .filter((n) => !(n instanceof HTMLElement && (n.tagName === 'BUTTON' || n.tagName === 'A' || n.classList.contains('sec-badge'))))
+    // The download menu wraps its button in a span: its "PNG" is no title either.
+    .filter((n) => !(n instanceof HTMLElement && (n.tagName === 'BUTTON' || n.tagName === 'A' || n.classList.contains('sec-badge') || n.classList.contains('sec-download-menu-wrap'))))
     .map((n) => n.textContent ?? '')
     .join(' ')
     .replace(/\s+/g, ' ')
