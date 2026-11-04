@@ -1146,6 +1146,18 @@ function updateAllDailyTrackingSpend() {
 // ============================================================
 
 /**
+ * Post yang di-boost lewat tombol Boost di aplikasi Instagram / Facebook
+ * dibuatkan campaign oleh Meta dengan nama postingannya sendiri --
+ * "Instagram post: <caption>", "Facebook post: ...", "Post: ...". Nama itu
+ * tidak pernah memuat kata kunci Boost Post akun, jadi selalu dihitung
+ * Boost, apa pun kata kuncinya. Aturan yang sama dipakai ATLAS
+ * (backend/src/config/metaAdsMetrics.js isBoostedPostName).
+ */
+function isBoostedPostName_(name) {
+  return /^\s*(?:(?:instagram|facebook)\s+)?post\s*:/i.test(String(name || ''));
+}
+
+/**
  * Spend H-1 per campaign, hanya kolom yang dipakai Daily Tracking. Sengaja
  * TIDAK memakai fetchInsights_ (Weekly.gs): itu meminta ~20 kolom termasuk
  * `actions` dan metrik turunan yang tidak pernah dibaca di sini, dan
@@ -1228,7 +1240,7 @@ function processTrackingConfig_(cfg, dryRun) {
       var name = rows[id].campaign_name || '';
       var spend = num_(rows[id].spend);
       nCampaign++;
-      if (name.toLowerCase().indexOf(cfg.boostMatch) > -1) {
+      if (isBoostedPostName_(name) || name.toLowerCase().indexOf(cfg.boostMatch) > -1) {
         boostSpend += spend;
       } else {
         nonBoostSpend += spend;
@@ -1441,9 +1453,10 @@ function processAutoAccountTracking_(accts, dryRun) {
       // apa adanya (sama seperti akun CPAS primer di processTrackingConfig_).
       // Akun khusus Boost/Non Boost Post juga tidak dipilah nama.
       if (isCpas) { cpasSpend += spend; return; }
+      var name = rows[cid].campaign_name || '';
+      if (isBoostedPostName_(name)) { boostSpend += spend; return; }
       if (kind === 'BOOST') { boostSpend += spend; return; }
       if (kind === 'NONBOOST') { nonBoostSpend += spend; return; }
-      var name = rows[cid].campaign_name || '';
       if (boostMatch && name.toLowerCase().indexOf(boostMatch) > -1) boostSpend += spend;
       else nonBoostSpend += spend;
     });
