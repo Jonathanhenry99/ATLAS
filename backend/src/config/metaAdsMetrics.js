@@ -285,15 +285,28 @@ export function storedValue(row, key) {
 // no keyword yet still files somewhere sensible.
 export function isBoostCampaign(campaignName, keyword) {
   const name = String(campaignName ?? '').toLowerCase();
+  if (isBoostedPostName(name)) return true;
   if (keyword) return name.includes(String(keyword).toLowerCase());
   return isBoostByName(name);
+}
+
+// A post boosted with the Boost button in the Instagram or Facebook app gets
+// a campaign Meta names after the post itself — "Instagram post: <caption>",
+// "Facebook post: …", "Post: …". Nobody types that name, so it can never
+// carry an account's Kata Kunci Boost Post: it is Boost whatever the keyword
+// (it was filed as Non-Boost, moving millions of a month between the two).
+const BOOSTED_POST_NAME = /^\s*(?:(?:instagram|facebook)\s+)?post\s*:/i;
+export function isBoostedPostName(campaignName) {
+  return BOOSTED_POST_NAME.test(String(campaignName ?? ''));
 }
 
 // Boost or Non-Boost for a row of one MAIN account ({ main_kind,
 // boost_keyword } from brand_ad_accounts, migration 059). An account that
 // holds only one kind of campaign decides on its own; a MIXED one (or one
-// not in the mirror) is split by its keyword as above.
+// not in the mirror) is split by its keyword as above. A boosted post is
+// Boost even in an account set up as Non-Boost.
 export function isBoostForAccount(campaignName, account) {
+  if (isBoostedPostName(campaignName)) return true;
   if (account?.main_kind === 'BOOST') return true;
   if (account?.main_kind === 'NONBOOST') return false;
   return isBoostCampaign(campaignName, account?.boost_keyword);

@@ -232,9 +232,15 @@ function nonBoostKind(key: MetaObjectiveKey | null, industry: MetaIndustry): Met
 //
 // Files written by ATLAS's Meta API fetch carry a "Campaign type" column
 // (Boost Post / Non Boost Post) decided from the account's Kata Kunci Boost
-// Post; where it is filled it wins over the name rule.
+// Post; where it is filled it wins over the name rule — except for a post
+// boosted from the Instagram / Facebook app ("Instagram post: <caption>",
+// named by Meta, never carrying the keyword). That one is Boost whatever the
+// column says, so files and archived reports labelled before this rule was
+// fixed (backend config/metaAdsMetrics isBoostedPostName) read right too.
+const BOOSTED_POST_NAME = /^\s*(?:(?:instagram|facebook)\s+)?post\s*:/i;
 export function isBoostRow(campCol: string | null) {
   return (r: SheetRow) => {
+    if (campCol && BOOSTED_POST_NAME.test(String(r[campCol] ?? ''))) return true;
     const type = String(r['Campaign type'] ?? '').trim().toLowerCase();
     if (type) return type.startsWith('boost');
     const v = String((campCol ? r[campCol] : '') || '').toLowerCase();

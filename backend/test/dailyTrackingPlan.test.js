@@ -138,6 +138,24 @@ test('Meta funnel: a Boost-only or Non-Boost-only MAIN account fills its bucket 
   assert.ok(!p.warnings.some((w) => w.code === 'boost_keyword_missing'));
 });
 
+test('Meta funnel: a post boosted from the Instagram app is Boost whatever the keyword', () => {
+  const p = plan({
+    salesRows: [sale('2026-10', 'website', 100)],
+    spendRows: [spend('2026-10', 'meta_boost_post', 10), spend('2026-10', 'meta_nonboost_post', 20)],
+    metaRows: [
+      meta('2026-10', 'MAIN', 'act_1', 'NV(Boost Post) | Traffic', { spend: 6, impressions: 600 }),
+      meta('2026-10', 'MAIN', 'act_1', 'Instagram post: As a corporate girlie with...', { spend: 4, impressions: 400 }),
+      meta('2026-10', 'MAIN', 'act_1', 'RM | Sales | Purchase', { spend: 20, impressions: 2000 }),
+      meta('2026-10', 'MAIN', 'act_9', 'Instagram post: an account with no keyword', { spend: 3, impressions: 300 }),
+    ],
+    accounts: [{ ad_account_id: 'act_1', account_type: 'MAIN', main_kind: 'MIXED', boost_keyword: 'boost post' }],
+  });
+  const byP = Object.fromEntries(month(p, '2026-10').platforms.map((x) => [x.platform, x.metrics]));
+  assert.equal(byP.meta_boost.impressions, 1300, 'keyword campaign + both boosted posts');
+  assert.equal(byP.meta_nonboost.impressions, 2000);
+  assert.ok(!p.warnings.some((w) => w.code === 'boost_keyword_missing'), 'a boosted post needs no keyword to be placed');
+});
+
 test('Meta funnel: Daily Tracking vs Meta API spend gap is flagged', () => {
   const p = plan({
     salesRows: [sale('2026-01', 'website', 100)],

@@ -1,6 +1,7 @@
 import { AppError } from '../../utils/errors.js';
 import { monthBounds } from '../../utils/monthPeriod.js';
 import { FIXED_SALES_LABELS, FIXED_SPEND_LABELS } from '../../config/dailyTrackingChannels.js';
+import { isBoostForAccount, isBoostedPostName } from '../../config/metaAdsMetrics.js';
 import * as repo from '../../repositories/internalDashboardRepository.js';
 import { applyFactPlan, logFailedRun } from './applyFactPlan.js';
 
@@ -100,14 +101,16 @@ function metaFunnelByMonth(metaRows, accounts, warnings) {
     if (r.account_type === 'CPAS') platform = 'meta_cpas';
     else {
       const account = mainOf.get(r.ad_account_id);
-      const kw = account?.boost_keyword;
-      if (account?.main_kind === 'BOOST') platform = 'meta_boost';
-      else if (account?.main_kind === 'NONBOOST') platform = 'meta_nonboost';
-      else if (!kw) {
+      const decided = account?.main_kind === 'BOOST' || account?.main_kind === 'NONBOOST'
+        || Boolean(account?.boost_keyword) || isBoostedPostName(r.campaign_name);
+      if (!decided) {
         const k = `${r.period}|${r.ad_account_id}`;
         missing.set(k, (missing.get(k) ?? 0) + (n(r.spend) ?? 0));
         continue;
-      } else platform = String(r.campaign_name ?? '').toLowerCase().includes(kw) ? 'meta_boost' : 'meta_nonboost';
+      }
+      // The same rule as every other reader (config/metaAdsMetrics): a post
+      // boosted from the Instagram / Facebook app is Boost whatever the keyword.
+      platform = isBoostForAccount(r.campaign_name, account) ? 'meta_boost' : 'meta_nonboost';
     }
     const bucket = ((out[r.period] ??= {})[platform] ??= { spend: null });
     const add = (key, v) => { if (v !== null) bucket[key] = (bucket[key] ?? 0) + v; };
