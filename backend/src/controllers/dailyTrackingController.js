@@ -88,12 +88,15 @@ export const importFile = asyncHandler(async (req, res) => {
     }
     if (!Array.isArray(selected)) throw new AppError('selected harus JSON array id kolom', 400);
   }
+  // Which "Deal Leads" column to use when the file has several filled ones.
+  const dealSource = req.body.dealSource === undefined || req.body.dealSource === '' ? undefined : Number(req.body.dealSource);
   const result = await service.importFromFile({
     brandId: Number(req.body.brandId),
     buffer: req.file.buffer,
     filename: req.file.originalname,
     userId: req.user.userId,
     selected,
+    dealSource,
   });
   res.json(result);
 });

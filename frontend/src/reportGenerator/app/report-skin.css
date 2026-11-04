@@ -67,7 +67,8 @@
 .mil-ui.report-generator-app .sec-download-btn:hover { border-color: var(--rs-accent); background: var(--rs-accent-soft); color: var(--rs-accent); }
 
 /* PNG with a choice: the whole card or one piece of it (SectionDownloadButton `parts`). */
-.mil-ui.report-generator-app .sec-download-menu-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+.mil-ui.report-generator-app .sec-download-menu-wrap { position: relative; display: inline-flex; flex-shrink: 0; margin-left: auto; }
+.mil-ui.report-generator-app .sec-download-btn ~ .sec-download-menu-wrap { margin-left: 0; }
 .mil-ui.report-generator-app .sec-download-btn[aria-expanded='true'] { border-color: var(--rs-accent); background: var(--rs-accent-soft); color: var(--rs-accent); }
 .mil-ui.report-generator-app .sec-download-menu {
   position: absolute;

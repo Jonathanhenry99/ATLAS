@@ -6,7 +6,7 @@ import { GroupedBarChart } from '../../components/GroupedBarChart';
 import { ParetoChart } from '../../components/ParetoChart';
 import { SearchSelect } from '../../components/SearchSelect';
 import { SegmentedToggle } from '../../components/SegmentedToggle';
-import { SectionDownloadButton, TABLE_ROOT_PARTS } from '../../components/SectionDownloadButton';
+import { SectionDownloadButton } from '../../components/SectionDownloadButton';
 import { growTableType, resetTableType } from '../../components/fitTableType';
 import { SectionExcelButton } from '../../components/SectionExcelButton';
 import { useInlineMetricEditor } from '../../hooks/useInlineMetricEditor';
@@ -369,7 +369,7 @@ export function FundamentalAnalysisSection({
       <div className="sec-heading shopee-heading">
         Fundamental Analysis <span className="sec-badge">Semua Iklan · Product Ads + Shop+ Ads · funnel decomposition</span>
         <SectionExcelButton />
-        <SectionDownloadButton parts={tree ? TABLE_ROOT_PARTS : undefined} />
+        <SectionDownloadButton />
       </div>
       <div style={{ padding: '1.1rem 1.4rem 0' }}>
         <EqualSplit>

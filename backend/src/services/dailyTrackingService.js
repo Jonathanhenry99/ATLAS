@@ -540,16 +540,26 @@ export async function previewImport({ brandId, buffer, filename }) {
     months,
     columns,
     previouslyIgnored: columns.filter((c) => c.previouslyIgnored).map((c) => ({ id: c.id, kind: c.kind, label: c.label, fileLabels: c.fileLabels })),
+    // More than one "Deal Leads" column with values: the user picks one
+    // (sent back as `dealSource` on import).
+    dealChoices: parsed.dealChoices,
   };
 }
 
 // Step 2: import only the chosen columns (`selected` = column ids from the
 // preview; omitted = everything, for older callers). Columns left out are
 // remembered as ignored for this brand; a column picked again is forgotten.
-export async function importFromFile({ brandId, buffer, filename, userId, selected }) {
+// `dealSource` picks the "Deal Leads" column when the file has several
+// filled ones (preview's `dealChoices`); without it such a file is refused
+// rather than saved from a guessed column.
+export async function importFromFile({ brandId, buffer, filename, userId, selected, dealSource }) {
   await assertBrand(brandId);
-  const parsed = parseDailyTrackingFile(buffer, filename);
+  const parsed = parseDailyTrackingFile(buffer, filename, { dealSource });
   const chosen = Array.isArray(selected) ? new Set(selected) : new Set(parsed.columns.map((c) => c.id));
+  if (parsed.dealConflict && chosen.has('leads:deals') && !parsed.dealChoices.some((d) => d.source === dealSource)) {
+    const list = parsed.dealChoices.map((d) => `"${d.label}" (kolom ${d.letter})`).join(', ');
+    throw new AppError(`File punya lebih dari satu kolom Deal yang terisi: ${list}. Pilih salah satu kolom Deal yang ingin disimpan.`, 422);
+  }
   const salesRows = parsed.salesRows.filter((r) => chosen.has(r.columnId));
   const spendRows = parsed.spendRows.filter((r) => chosen.has(r.columnId));
   // A day's leads row carries cold leads and deals side by side; each is

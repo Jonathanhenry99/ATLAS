@@ -17,6 +17,10 @@ import type { SheetRow, Sentiment } from './types';
 //     Interactions, Profile Visits, Follows — each earned from the same
 //     Impressions, which is why Impressions/Spending/CPM appear under all
 //     three branches rather than once at the top.
+//   • A Non-Boost or CPAS export with no purchases at all (Traffic or
+//     Awareness campaigns: Meta sends the purchase columns empty) has no GMV
+//     to root the sales tree in. It is read by what those campaigns buy
+//     instead — Link Clicks, or Impressions when there are no clicks either.
 //
 // The row shape produced here is Shopee's FunnelTreeRow / FunnelValueRow on
 // purpose: SymptomTreePanel and the values table then render Meta with no
@@ -175,6 +179,44 @@ const SALES_TREE: readonly TreeDef<MetaSalesMetrics>[] = [
   { key: 'atcUnderPurchase', metric: 'atc', label: 'ATC', prefix: '│        ├─ ', depth: 4, fmt: 'num', sentiment: 'higher-better' },
   { key: 'purchase', metric: 'purchase', label: 'Purchase', prefix: '│        └─ ', depth: 4, fmt: 'num', sentiment: 'higher-better' },
   { key: 'aov', metric: 'aov', label: 'Average Order Value', prefix: '└─ ', depth: 1, fmt: 'rp', sentiment: 'higher-better' },
+];
+
+// ── Traffic / Awareness funnel: sales lanes without purchases ───────────
+
+export interface MetaTrafficMetrics {
+  linkClicks: number | null;
+  impressions: number | null;
+  spend: number | null;
+  cpm: number | null;
+  ctr: number | null;
+}
+
+export function metaTrafficMetrics(rows: SheetRow[]): MetaTrafficMetrics {
+  const linkClicks = total(rows, ['link clicks'], ['ctr', 'rate']);
+  const impressions = total(rows, ['impressions']);
+  const spend = total(rows, ['amount spent', 'spend']);
+  return {
+    linkClicks,
+    impressions,
+    spend,
+    cpm: rateOr(ratio(spend, impressions, 1000), rows, ['cpm']),
+    ctr: rateOr(ratio(linkClicks, impressions), rows, ['ctr'], ['rate (', 'to atc']),
+  };
+}
+
+// Link Clicks = Impressions × CTR, Impressions = Spending ÷ CPM.
+const TRAFFIC_TREE: readonly TreeDef<MetaTrafficMetrics>[] = [
+  { key: 'linkClicks', metric: 'linkClicks', label: 'Link Clicks', prefix: '', depth: 0, fmt: 'num', sentiment: 'higher-better' },
+  { key: 'impressions', metric: 'impressions', label: 'Impressions', prefix: '├─ ', depth: 1, fmt: 'num', sentiment: 'higher-better' },
+  { key: 'spend', metric: 'spend', label: 'Spending', prefix: '│  ├─ ', depth: 2, fmt: 'rp', sentiment: 'neutral' },
+  { key: 'cpm', metric: 'cpm', label: 'CPM', prefix: '│  └─ ', depth: 2, fmt: 'rp', sentiment: 'lower-better' },
+  { key: 'ctr', metric: 'ctr', label: 'Click-Through Rate', prefix: '└─ ', depth: 1, fmt: 'pct', sentiment: 'higher-better' },
+];
+
+const AWARENESS_TREE: readonly TreeDef<MetaTrafficMetrics>[] = [
+  { key: 'impressions', metric: 'impressions', label: 'Impressions', prefix: '', depth: 0, fmt: 'num', sentiment: 'higher-better' },
+  { key: 'spend', metric: 'spend', label: 'Spending', prefix: '├─ ', depth: 1, fmt: 'rp', sentiment: 'neutral' },
+  { key: 'cpm', metric: 'cpm', label: 'CPM', prefix: '└─ ', depth: 1, fmt: 'rp', sentiment: 'lower-better' },
 ];
 
 // ── Brand funnel: Boost Post ─────────────────────────────────────────────
@@ -547,7 +589,17 @@ function assemble<M>(defs: readonly TreeDef<M>[], mOld: M, mCur: M, keep?: Reado
 const SALES_CONVERSION_BRANCH: ReadonlySet<string> = new Set(['visitToAtc', 'visitor', 'atcUnderVisit', 'atcToPurchase', 'atcUnderPurchase', 'purchase']);
 
 export function buildMetaSalesFunnel(oldRows: SheetRow[], curRows: SheetRow[], opts: { keepConversionBranch?: boolean } = {}): MetaFunnel {
-  return assemble(SALES_TREE, metaSalesMetrics(oldRows), metaSalesMetrics(curRows), opts.keepConversionBranch ? SALES_CONVERSION_BRANCH : undefined);
+  const sales = assemble(SALES_TREE, metaSalesMetrics(oldRows), metaSalesMetrics(curRows), opts.keepConversionBranch ? SALES_CONVERSION_BRANCH : undefined);
+  return sales.hasData ? sales : buildMetaTrafficFunnel(oldRows, curRows);
+}
+
+// No GMV in either period: rooted in Link Clicks, or in Impressions when the
+// export has no clicks either.
+export function buildMetaTrafficFunnel(oldRows: SheetRow[], curRows: SheetRow[]): MetaFunnel {
+  const mOld = metaTrafficMetrics(oldRows);
+  const mCur = metaTrafficMetrics(curRows);
+  const traffic = assemble(TRAFFIC_TREE, mOld, mCur);
+  return traffic.hasData ? traffic : assemble(AWARENESS_TREE, mOld, mCur);
 }
 
 export function buildMetaBrandFunnel(oldRows: SheetRow[], curRows: SheetRow[]): MetaFunnel {

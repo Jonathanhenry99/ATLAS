@@ -113,6 +113,8 @@
 .dt-import-column-name .badge { font-size: .72rem; }
 .dt-import-column-from { font-size: 0.75rem; color: var(--text-muted); }
 .dt-import-column-stat { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+.dt-import-deal-choice { display: block; font-size: 0.85rem; margin: 0.4rem 0 0; }
+.dt-import-deal-choice .dt-import-column:first-of-type { border-top: 0; }
 @media (max-width: 560px) {
   .dt-import-column { grid-template-columns: auto 1fr; }
   .dt-import-column-stat { grid-column: 2; white-space: normal; }

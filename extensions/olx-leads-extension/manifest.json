@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Leads OLX Counter - Mobil Seken",
+  "version": "2.1",
+  "description": "Menghitung jumlah chat baru (leads) OLX per tanggal untuk disalin ke spreadsheet Brand Tracking.",
+  "content_scripts": [
+    {
+      "matches": ["https://www.olx.co.id/nf/chat*"],
+      "js": ["main.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    }
+  ]
+}

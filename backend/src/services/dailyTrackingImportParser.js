@@ -155,7 +155,11 @@ function classifyHeaderRow(headerRow) {
 
   // Leads columns come out before the spend scan below, which would
   // otherwise take every one of them as an ad channel.
-  const leads = { totalCol: null, regionCols: [], dealCol: null };
+  // A sheet can carry "Deal Leads" more than once (Valentine's has a second
+  // one, further right, filled only on month Total rows), so every match is
+  // kept; which one the days are read from is settled once the whole file
+  // has been seen (see resolveDealSource).
+  const leads = { totalCol: null, regionCols: [], dealCols: [] };
   for (let i = 0; i < norm.length; i += 1) {
     if (consumed.has(i) || !norm[i]) continue;
     const label = cleanChannelLabel(norm[i]);
@@ -163,7 +167,7 @@ function classifyHeaderRow(headerRow) {
       if (/total/i.test(label)) leads.totalCol = i; else leads.regionCols.push(i);
       consumed.add(i);
     } else if (DEAL_HEADER.test(label)) {
-      leads.dealCol = i;
+      leads.dealCols.push(i);
       consumed.add(i);
     } else if (LEAD_NOISE.test(label)) {
       consumed.add(i);
@@ -189,6 +193,13 @@ const MONTHS = {
   januari: 1, februari: 2, maret: 3, mei: 5, juni: 6, juli: 7, agustus: 8, oktober: 10, desember: 12,
   jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, agu: 8, sep: 9, sept: 9, oct: 10, okt: 10, nov: 11, dec: 12, des: 12,
 };
+
+// Spreadsheet column letter for a 0-based index (0 → A, 27 → AB).
+function columnLetter(i) {
+  let s = '';
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+}
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 
@@ -249,7 +260,14 @@ function parseAmount(raw) {
  * routinely have separator rows, month-marker rows, and stale grand-total
  * rows mixed in with real data.
  */
-export function parseDailyTrackingFile(buffer, originalFilename = 'file') {
+//
+// Several "Deal Leads" columns: each is a "deal source", numbered by its
+// position among the deal columns of its header row (1st, 2nd, ...). Only
+// sources with a value on some day count. One such source is used as is;
+// with more than one the file is ambiguous — the result carries
+// `dealChoices` and `dealConflict: true`, the days are read from the
+// leftmost source until `dealSource` (a choice's `source`) says otherwise.
+export function parseDailyTrackingFile(buffer, originalFilename = 'file', { dealSource } = {}) {
   let workbook;
   try {
     workbook = readWorkbook(buffer);
@@ -284,6 +302,8 @@ export function parseDailyTrackingFile(buffer, originalFilename = 'file') {
     return e;
   };
   let dataRowsParsed = 0;
+  const dayLeads = []; // { entryDate, coldLeads, dealValues[source], dealLabels[source] }
+  const dealSources = []; // per source: { label, letter, rows, total }
 
   for (const row of raw) {
     const map = classifyHeaderRow(row);
@@ -323,21 +343,43 @@ export function parseDailyTrackingFile(buffer, originalFilename = 'file') {
     const total = leads.totalCol == null ? null : parseAmount(row[leads.totalCol]);
     const regions = leads.regionCols.map((c) => parseAmount(row[c])).filter((v) => v != null);
     const coldLeads = total ?? (regions.length ? regions.reduce((a, v) => a + v, 0) : null);
-    const deals = leads.dealCol == null ? null : parseAmount(row[leads.dealCol]);
-    if (coldLeads != null || deals != null) {
+    const dealValues = leads.dealCols.map((c) => parseAmount(row[c]));
+    dealValues.forEach((v, source) => {
+      if (!dealSources[source]) {
+        const c = leads.dealCols[source];
+        dealSources[source] = { label: cleanChannelLabel(currentMap.headers[c]), letter: columnLetter(c), rows: 0, total: 0 };
+      }
+      if (v != null) { dealSources[source].rows += 1; dealSources[source].total += v; }
+    });
+    if (coldLeads != null || dealValues.some((v) => v != null)) {
       anyValue = true;
-      const fields = [];
-      if (coldLeads != null) {
-        const col = leadColumn('coldLeads', currentMap.headers[leads.totalCol ?? leads.regionCols[0]]);
-        col.rows += 1; col.total += coldLeads; fields.push('coldLeads');
-      }
-      if (deals != null) {
-        const col = leadColumn('deals', currentMap.headers[leads.dealCol]);
-        col.rows += 1; col.total += deals; fields.push('deals');
-      }
-      leadRows.push({ entryDate, coldLeads, deals, fields });
+      dayLeads.push({
+        entryDate, coldLeads, dealValues,
+        coldLabel: currentMap.headers[leads.totalCol ?? leads.regionCols[0]],
+        dealLabels: leads.dealCols.map((c) => currentMap.headers[c]),
+      });
     }
     if (anyValue) dataRowsParsed += 1;
+  }
+
+  const filled = dealSources.map((d, source) => ({ ...d, source })).filter((d) => d.rows > 0);
+  const dealConflict = filled.length > 1;
+  const chosenSource = dealConflict && filled.some((d) => d.source === dealSource)
+    ? dealSource
+    : filled[0]?.source;
+  for (const d of dayLeads) {
+    const deals = chosenSource == null ? null : (d.dealValues[chosenSource] ?? null);
+    if (d.coldLeads == null && deals == null) continue;
+    const fields = [];
+    if (d.coldLeads != null) {
+      const col = leadColumn('coldLeads', d.coldLabel);
+      col.rows += 1; col.total += d.coldLeads; fields.push('coldLeads');
+    }
+    if (deals != null) {
+      const col = leadColumn('deals', d.dealLabels[chosenSource]);
+      col.rows += 1; col.total += deals; fields.push('deals');
+    }
+    leadRows.push({ entryDate: d.entryDate, coldLeads: d.coldLeads, deals, fields });
   }
 
   if (!headerSeen) {
@@ -359,5 +401,8 @@ export function parseDailyTrackingFile(buffer, originalFilename = 'file') {
     leadRows,
     columns: [...columns.values()].map((c) => ({ ...c, fileLabels: [...c.fileLabels] })),
     dataRowsParsed,
+    dealConflict,
+    dealSource: chosenSource ?? null,
+    dealChoices: dealConflict ? filled : [],
   };
 }

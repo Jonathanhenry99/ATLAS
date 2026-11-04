@@ -370,6 +370,11 @@
      has every row. */
   &.png-export .sec-block :is(.dt-wrap, .meta-changes > div){max-height:none!important}
   &.png-export .sec-block :is(.dt-wrap, .meta-changes > div) tbody tr:nth-child(n+16){display:none}
+  /* In a PNG every table's columns fit their data: the table is only as wide
+     as its content needs instead of stretched across the card (a min-width
+     kept for a wide table still holds — the section is widened for it). */
+  &.png-export .sec-block table{width:auto!important}
+  &.png-export .sec-block table :is(th,td){width:auto!important}
   /* ── Period input ── */
   .period-input-row{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:1rem}
   .period-input-field{background:var(--surface);border-radius:10px;border:1.5px solid var(--border);padding:.7rem 1rem;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:4px}
