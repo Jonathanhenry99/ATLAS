@@ -26,6 +26,14 @@ export const SHOW_FOR_DAYS = 60;
 
 export const WHATS_NEW = [
   {
+    id: 'brand-switch-logo',
+    released: '2026-11-05',
+    path: '/data-brand',
+    target: '[data-feature="brand-switch"]',
+    title: 'Brand yang sedang dibuka kini lebih jelas',
+    body: 'Logo dan nama brand tampil besar di Data Collection Hub. Klik Ganti brand untuk pindah brand langsung dari sini, tanpa kembali ke langkah 01.',
+  },
+  {
     id: 'restore-last-report',
     released: '2026-11-01',
     path: '/report-generator',

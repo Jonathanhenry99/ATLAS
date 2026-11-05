@@ -92,6 +92,49 @@
   box-shadow: inset 0 0 0 1px var(--bp-rule);
 }
 .bp-brand-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bp-brand-avatar.is-empty { color: #8a96b3; background: #f3f5fa; }
+
+/* ── Brand switch: the brand this whole page belongs to ────────────────────
+   Logo, name at heading size, and a "Ganti brand" cue so switching reads
+   as done here (not back at step 01). Scoped to this page; the shared
+   .brand-picker-btn elsewhere is untouched. */
+.bp-command.is-inline .bp-command-brand { flex: 0 1 400px; min-width: 300px; }
+.bp-command .brand-picker-btn.bp-brand-switch {
+  gap: 14px; min-height: 76px; padding: 12px 14px 12px 12px;
+  border: 1.5px solid #cdd6f3; border-radius: 18px;
+  background: linear-gradient(135deg, #f5f7ff 0%, #fff 62%);
+  box-shadow: 0 1px 2px rgba(15, 26, 58, .05), 0 10px 24px -18px rgba(30, 62, 184, .45);
+  transition: border-color 180ms ease, box-shadow 200ms ease, transform 160ms var(--bp-ease);
+}
+.bp-command .brand-picker-btn.bp-brand-switch:hover { border-color: #9fb1ec; box-shadow: 0 1px 2px rgba(15, 26, 58, .05), 0 14px 30px -16px rgba(30, 62, 184, .5); }
+.bp-command .brand-picker-btn.bp-brand-switch:active { transform: scale(.99); }
+.bp-command .brand-picker-btn.bp-brand-switch.is-open { border-color: var(--soft-accent); box-shadow: 0 0 0 4px rgba(30, 62, 184, .12); }
+.bp-brand-switch .bp-brand-avatar { width: 52px; height: 52px; border-radius: 14px; font-size: 1.05rem; background: #fff; box-shadow: inset 0 0 0 1px var(--bp-rule), 0 4px 10px -6px rgba(15, 26, 58, .35); }
+.bp-command .bp-brand-switch .brand-picker-text { gap: 3px; }
+.bp-command .bp-brand-switch .brand-picker-text strong {
+  overflow: hidden; color: var(--soft-ink); font-size: 1.28rem; font-weight: 800; letter-spacing: -.028em; line-height: 1.15;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.bp-command .bp-brand-switch .brand-picker-text small { font-size: .76rem; font-weight: 550; }
+.bp-brand-switch-cue {
+  display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; margin-left: auto; padding: 6px 9px 6px 10px;
+  border-radius: 999px; background: #eaeefc; color: var(--soft-accent); font-size: .74rem; font-weight: 700; white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.bp-brand-switch:hover .bp-brand-switch-cue,
+.bp-brand-switch.is-open .bp-brand-switch-cue { background: var(--soft-accent); color: #fff; }
+.bp-brand-switch-chev { transition: transform 220ms var(--bp-ease); }
+.bp-brand-switch.is-open .bp-brand-switch-chev { transform: rotate(180deg); }
+/* The cue replaces the shared button's trailing chevron rule. */
+.bp-command .brand-picker-btn.bp-brand-switch > svg { margin-left: 0; transform: none; }
+.bp-command .bp-brand-switch .bp-brand-switch-cue svg { color: currentColor; }
+
+/* The list: each brand with its own logo, status as a dot on the tile. */
+.bp-command .brand-picker-results button { gap: .75rem; }
+.bp-result-mark { position: relative; flex: 0 0 auto; }
+.bp-result-mark .bp-brand-avatar { width: 34px; height: 34px; border-radius: 10px; font-size: .72rem; background: #fff; }
+.bp-result-mark .brand-status-dot { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; box-shadow: 0 0 0 2px #fff; }
+.bp-command .brand-picker-result-copy strong { font-size: .84rem; }
 
 
 
@@ -299,3 +342,8 @@ main.main-content:has(.bc-master) { overflow: clip; }
 /* The platform banner lost its month chips (the cells below show each
    month); its readiness figure keeps the right edge on its own. */
 .bs .brand-market-ready { margin-left: auto; }
+
+/* With the larger brand switch, the title still sits beside it on one row:
+   the title block shrinks (its copy wraps) before the row breaks. */
+.bp-data .bp-panel-head > .bp-data-ident { flex: 1 1 340px; min-width: 0; }
+.bp-command.is-inline .bp-stat { min-height: 76px; align-content: center; border-radius: 18px; }

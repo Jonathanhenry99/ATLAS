@@ -17,6 +17,14 @@
         ],
         "createdAt": "2026-10-03T08:33:48.597Z",
         "reason": "Only two width transitions here: the nav active pill (absolute background span, reflows nothing else) and the SqueezeCarousel squeeze the user asked to integrate, ported unchanged"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "frontend/src/reportGenerator/app/report-skin.css"
+        ],
+        "createdAt": "2026-11-05T03:20:23.343Z"
       }
     ]
   }

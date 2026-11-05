@@ -7,7 +7,7 @@ import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-m
 import {
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert,
   Download, FileSpreadsheet, Loader2, Plus, RefreshCw,
-  Trash2, Upload, CalendarRange, HelpCircle, BadgeCheck, CalendarClock, FileBarChart, ArrowRight,
+  Trash2, Upload, CalendarRange, Search, HelpCircle, BadgeCheck, CalendarClock, FileBarChart, ArrowRight,
 } from 'lucide-react';
 import MetaAutomationSection from '../components/brandSettings/MetaAutomationSection.jsx';
 import MetaDatasetSpecs from '../components/brandSettings/MetaDatasetSpecs.jsx';
@@ -338,12 +338,18 @@ function BrandPicker({ brands, brand, sector, onSelect, reduced }) {
 
   return (
     <div className="brand-picker" ref={wrap}>
-      <button type="button" className={`brand-picker-btn ${open ? 'is-open' : ''}`} onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open}>
+      {/* The brand everything below belongs to: its logo, its name large,
+          and a plain "Ganti brand" cue — switching happens here, not back
+          at step 01. */}
+      <button type="button" className={`brand-picker-btn bp-brand-switch ${open ? 'is-open' : ''}`} data-feature="brand-switch" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open}>
+        <BrandAvatar brand={brand} />
         <span className="brand-picker-text">
           <strong>{brand?.brand_name ?? 'Pilih brand'}</strong>
-          <small>{sector || `${brands.length} brand terdaftar`}</small>
+          <small>{[sector, `${brands.length} brand terdaftar`].filter(Boolean).join(' · ')}</small>
         </span>
-        <ChevronDown size={16} aria-hidden="true" />
+        <span className="bp-brand-switch-cue" aria-hidden="true">
+          <Search size={13} /> Ganti brand <ChevronDown size={14} className="bp-brand-switch-chev" />
+        </span>
       </button>
       <AnimatePresence>
         {open && (
@@ -382,7 +388,10 @@ function BrandPicker({ brands, brand, sector, onSelect, reduced }) {
                           className={item.brand_id === brand?.brand_id ? 'is-active' : ''}
                           onClick={() => { onSelect(item); setOpen(false); }}
                         >
-                          <span className={`brand-status-dot is-${itemStatus}`} aria-hidden="true" />
+                          <span className="bp-result-mark">
+                            <BrandAvatar brand={item} lazy />
+                            <span className={`brand-status-dot is-${itemStatus}`} aria-hidden="true" />
+                          </span>
                           <span className="brand-picker-result-copy">
                             <strong>{item.brand_name}</strong>
                             <small>{BRAND_STATUS_LABELS[itemStatus]}</small>
@@ -742,15 +751,15 @@ function PlatformPanel({ platform, months, lookup, reduced, onPick, onDelete, on
 // core datasets are for the months on screen.
 const PLATFORM_LOGO = { meta: 'meta', shopee: 'shopee', tiktok: 'tiktok', google: 'google' };
 
-// The brand's profile picture beside the section title: its uploaded logo
-// (Setup Context & Brand Direction), else its initials.
-function BrandAvatar({ brand }) {
-  if (!brand) return null;
+// The brand's profile picture, in the brand picker and its list: its
+// uploaded logo (Setup Context & Brand Direction), else its initials.
+function BrandAvatar({ brand, lazy = false }) {
+  if (!brand) return <span className="bp-brand-avatar is-empty" aria-hidden="true"><Search size={18} /></span>;
   const initials = brand.brand_name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   return (
     <span className="bp-brand-avatar" aria-hidden="true">
       {brand.logo_version
-        ? <img src={`/api/public/brand-logo/${brand.brand_id}?v=${brand.logo_version}`} alt="" />
+        ? <img key={brand.brand_id} src={`/api/public/brand-logo/${brand.brand_id}?v=${brand.logo_version}`} alt="" loading={lazy ? 'lazy' : undefined} decoding="async" />
         : initials}
     </span>
   );
@@ -784,7 +793,6 @@ function DataView({ brand, command, months, windowMonths, windowEnd, setWindowEn
       <div className="bp-panel-head">
         {command}
         <div className="bp-data-ident">
-          <BrandAvatar brand={brand} />
           <div>
             <h2>Input Monthly Performance Data</h2>
             <p>Semua data {brand?.brand_name ?? 'brand ini'} tersimpan disini untuk Report Generator, Brand Overview, dan Meta Automation. Cukup unggah data sekali, tidak perlu mengulang di setiap fitur.</p>
