@@ -71,16 +71,20 @@ const followSales = (total, sales) => splitByWeight(total, sales);
 
 export const __test = { splitEqual, splitByWeight, runningMonth, followSales };
 
-// Whether migration 063 has run (the months snapshot column). Checked once.
+// Whether migration 063 has run (the months snapshot column). Once found it
+// stays found; until then it is checked again at most once a minute, so a
+// running server picks the column up as soon as the migration runs.
 let monthsColumn = null;
+let monthsCheckedAt = 0;
 function hasMonthsColumn(db) {
-  if (!monthsColumn) {
-    monthsColumn = db.query(
-      `SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'brand_annual_target_revisions' AND column_name = 'months'`,
-    ).then(({ rows }) => rows.length > 0).catch(() => { monthsColumn = null; return false; });
-  }
-  return monthsColumn;
+  if (monthsColumn === true) return Promise.resolve(true);
+  if (monthsColumn === false && Date.now() - monthsCheckedAt < 60_000) return Promise.resolve(false);
+  monthsCheckedAt = Date.now();
+  return db.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'brand_annual_target_revisions' AND column_name = 'months'`,
+  ).then(({ rows }) => { monthsColumn = rows.length > 0; return monthsColumn; })
+    .catch(() => { monthsColumn = null; return false; });
 }
 
 // The 12 months as they now stand, kept on the newest version.
