@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, ArrowRight, CalendarClock, Check, Loader2, Scale, X } from 'lucide-react';
 import { fmtRp, fmtRpShort } from '../../dailyTracking/lib/summary.js';
 import MonthBars from './MonthBars.jsx';
-import { MONTH_SHORT, changeFromOriginal, pct, planMonths, runningMonth, signedPct } from './annualModel.js';
+import { MONTH_SHORT, changeFromOriginal, pct, planBudget, planMonths, runningMonth, signedPct } from './annualModel.js';
 
 // The step between typing a new annual target and saving it: how the new
 // totals reach the months.
@@ -32,10 +32,10 @@ export default function UpdateTargetDialog({ open, year, data, draft, typo, savi
     const sales = Number(draft.sales) || 0;
     const spend = draft.spend === '' ? null : Number(draft.spend);
     const cur = (key) => data.months.map((m) => m[key] ?? 0);
-    const make = (s) => ({
-      sales: planMonths(cur('targetSales'), sales, s, from),
-      spend: spend != null ? planMonths(cur('targetSpend'), spend, s, from) : null,
-    });
+    const make = (s) => {
+      const salesPlan = planMonths(cur('targetSales'), sales, s, from);
+      return { sales: salesPlan, spend: spend != null ? planBudget(cur('targetSpend'), spend, salesPlan.values, s, from) : null };
+    };
     const even = make('even');
     const remaining = from ? make('remaining') : null;
     const remainingOk = remaining && remaining.sales.values && (!remaining.spend || remaining.spend.values);
@@ -90,7 +90,7 @@ export default function UpdateTargetDialog({ open, year, data, draft, typo, savi
       figure: fmtRpShort(plans.even.sales.values[0]),
       figureNote: 'per bulan',
       lines: [
-        plans.even.spend ? `Budget ${fmtRpShort(plans.even.spend.values[0])} / bulan` : null,
+        plans.even.spend ? `Budget ${fmtRpShort(plans.even.spend.values[0])} / bulan · ikut target` : null,
         'Cocok bila target awal keliru atau dihitung ulang setahun penuh',
       ],
     },

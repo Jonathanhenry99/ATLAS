@@ -16,6 +16,15 @@ import { AppError } from '../utils/errors.js';
 //                 is history); the difference goes to the running month and
 //                 the ones after it, in proportion to what each already held.
 //
+// The ad budget follows the sales target: each month's budget is the same
+// share of the year's budget as its sales target is of the year's sales —
+// the same Cost per Revenue every month — rather than an even twelfth. A
+// month carrying 20% of the sales carries 20% of the budget.
+//
+// Every version keeps the 12 months as it left them (migration 063); the
+// newest keeps following the split edited in Brand Tracking until the next
+// version is added, so the baseline's months are the plan awal.
+//
 // An even split can also be a correction, for a target awal entered wrong
 // (say a month's figure typed in as the year's): it becomes the baseline the
 // current target is read against; the wrong figures stay in the history,
@@ -57,7 +66,41 @@ function splitByWeight(total, weights) {
   return out;
 }
 
-export const __test = { splitEqual, splitByWeight, runningMonth };
+// The year's budget over the months, following their sales targets.
+const followSales = (total, sales) => splitByWeight(total, sales);
+
+export const __test = { splitEqual, splitByWeight, runningMonth, followSales };
+
+// Whether migration 063 has run (the months snapshot column). Checked once.
+let monthsColumn = null;
+function hasMonthsColumn(db) {
+  if (!monthsColumn) {
+    monthsColumn = db.query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'brand_annual_target_revisions' AND column_name = 'months'`,
+    ).then(({ rows }) => rows.length > 0).catch(() => { monthsColumn = null; return false; });
+  }
+  return monthsColumn;
+}
+
+// The 12 months as they now stand, kept on the newest version.
+async function snapshotLatest(db, brandId, year) {
+  if (!(await hasMonthsColumn(db))) return;
+  const months = await readMonths(db, brandId, year);
+  const { rows: [annual] } = await db.query('SELECT target_spend FROM brand_annual_targets WHERE brand_id = $1 AND year = $2', [brandId, year]);
+  const withSpend = annual?.target_spend != null;
+  await db.query(
+    `UPDATE brand_annual_target_revisions SET months = $3::jsonb
+      WHERE brand_id = $1 AND year = $2
+        AND version = (SELECT MAX(version) FROM brand_annual_target_revisions WHERE brand_id = $1 AND year = $2)`,
+    [brandId, year, JSON.stringify(months.map((x) => ({ sales: x.sales, spend: withSpend ? x.spend : null })))],
+  );
+}
+
+const parseMonths = (v) => {
+  const arr = typeof v === 'string' ? JSON.parse(v) : v;
+  return Array.isArray(arr) && arr.length === 12 ? arr.map((x) => ({ sales: toInt(x?.sales) ?? 0, spend: toInt(x?.spend) })) : null;
+};
 
 async function readMonths(db, brandId, year) {
   const { rows } = await db.query(
@@ -98,6 +141,7 @@ const shapeAnnual = (r) => (r ? {
 
 export async function getAnnualTargets(brandId, year) {
   await assertBrand(pool, brandId);
+  const withMonths = await hasMonthsColumn(pool);
   const [{ rows: [annual] }, { rows: revisions }, months, { rows: sales }, { rows: spend }] = await Promise.all([
     pool.query(
       `SELECT a.*, u.full_name AS updated_by_name FROM brand_annual_targets a
@@ -107,7 +151,7 @@ export async function getAnnualTargets(brandId, year) {
     ),
     pool.query(
       `SELECT r.version, r.kind, r.target_sales, r.target_spend, to_char(r.effective_month, 'YYYY-MM') AS effective_month,
-              r.note, r.created_at, u.full_name AS created_by_name
+              r.note, r.created_at, u.full_name AS created_by_name${withMonths ? ', r.months' : ''}
          FROM brand_annual_target_revisions r
          LEFT JOIN users u ON u.user_id = r.created_by
         WHERE r.brand_id = $1 AND r.year = $2
@@ -137,18 +181,34 @@ export async function getAnnualTargets(brandId, year) {
     note: r.note,
     createdAt: r.created_at,
     createdByName: r.created_by_name,
+    months: withMonths ? parseMonths(r.months) : null,
   }));
   // The baseline: the latest correction, or the original when there is none.
   const baseline = [...versions].reverse().find((v) => v.kind !== 'revision') ?? null;
+  const updates = baseline ? versions.filter((v) => v.version > baseline.version).length : 0;
+  // The plan awal per month: the baseline's own months; before migration 063
+  // the months as they stand while nothing was adjusted, else an even split
+  // of the baseline's totals (how every target awal was first saved).
+  const initial = (() => {
+    if (!annual || !baseline) return null;
+    if (baseline.months) return { months: baseline.months, estimated: false };
+    if (!updates) return { months: months.map((x) => ({ sales: x.sales, spend: annual.target_spend != null ? x.spend : null })), estimated: false };
+    const s = splitEqual(baseline.targetSales ?? 0, 12);
+    const p = baseline.targetSpend != null ? splitEqual(baseline.targetSpend, 12) : null;
+    return { months: s.map((v, i) => ({ sales: v, spend: p ? p[i] : null })), estimated: true };
+  })();
   return {
     year,
     annual: shapeAnnual(annual),
     original: baseline,
     corrected: baseline?.kind === 'correction',
-    updates: baseline ? versions.filter((v) => v.version > baseline.version).length : 0,
-    revisions: versions.map((v) => ({ ...v, superseded: Boolean(baseline && v.version < baseline.version) })),
+    updates,
+    initialEstimated: Boolean(initial?.estimated),
+    revisions: versions.map(({ months: _m, ...v }) => ({ ...v, superseded: Boolean(baseline && v.version < baseline.version) })),
     months: months.map(({ m, sales: s, spend: p }) => ({
       month: `${year}-${pad(m)}`,
+      initialSales: initial ? initial.months[m - 1].sales : null,
+      initialSpend: initial ? initial.months[m - 1].spend : null,
       targetSales: annual ? s : null,
       targetSpend: annual && annual.target_spend != null ? p : null,
       actualSales: realSales.get(m) ?? null,
@@ -177,7 +237,7 @@ export async function setAnnualTarget({ brandId, year, targetSales, targetSpend,
 
     if (!current) {
       const salesSplit = splitEqual(sales, 12);
-      const spendSplit = spend != null ? splitEqual(spend, 12) : null;
+      const spendSplit = spend != null ? followSales(spend, salesSplit) : null;
       for (const m of MONTHS) {
         await writeMonth(client, { brandId, year, m, sales: salesSplit[m - 1], spend: spendSplit ? spendSplit[m - 1] : undefined, userId });
       }
@@ -211,9 +271,20 @@ export async function setAnnualTarget({ brandId, year, targetSales, targetSpend,
         return new Map([...past.map((x) => [x.m, x[key]]), ...rest.map((x, i) => [x.m, shares[i]])]);
       };
       const salesPlan = plan('sales', sales);
-      // A budget first given in an update follows whatever monthly budgets
-      // already exist, or an even split when there are none.
-      const spendPlan = spend != null ? plan('spend', spend) : null;
+      // The budget follows the new sales plan: every month in an even split,
+      // the running month on in 'remaining' (months over keep their budget).
+      const spendPlan = (() => {
+        if (spend == null) return null;
+        const open = evenSplit ? months : months.filter((x) => x.m >= eff);
+        const kept = evenSplit ? [] : months.filter((x) => x.m < eff);
+        const keptSum = kept.reduce((a, x) => a + x.spend, 0);
+        const remainder = spend - keptSum;
+        if (remainder < 0) {
+          throw new AppError(`Budget iklan baru (Rp${spend.toLocaleString('id-ID')}) lebih kecil dari total bulan yang sudah lewat (Rp${keptSum.toLocaleString('id-ID')}). Pilih bagi rata 12 bulan atau naikkan angkanya.`, 400);
+        }
+        const shares = followSales(remainder, open.map((x) => salesPlan.get(x.m)));
+        return new Map([...kept.map((x) => [x.m, x.spend]), ...open.map((x, i) => [x.m, shares[i]])]);
+      })();
       for (const m of MONTHS) {
         await writeMonth(client, { brandId, year, m, sales: salesPlan.get(m), spend: spendPlan ? spendPlan.get(m) : undefined, userId });
       }
@@ -229,6 +300,7 @@ export async function setAnnualTarget({ brandId, year, targetSales, targetSpend,
         [brandId, year, sales, spend, monthStart(year, eff), note?.trim() || null, userId, correction ? 'correction' : 'revision'],
       );
     }
+    await snapshotLatest(client, brandId, year);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -269,6 +341,7 @@ export async function saveAnnualSplit({ brandId, year, months, userId }) {
     for (const m of MONTHS) {
       await writeMonth(client, { brandId, year, m, sales: salesValues[m - 1], spend: spendValues ? spendValues[m - 1] : undefined, userId });
     }
+    await snapshotLatest(client, brandId, year);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

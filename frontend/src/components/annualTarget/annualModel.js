@@ -53,3 +53,20 @@ export function planMonths(current, total, split, from) {
   if (rest < 0) return { values: null, past, rest };
   return { values: [...current.slice(0, cut), ...splitByWeight(rest, current.slice(cut))], past, rest };
 }
+
+// The ad budget follows the sales target: each month the same share of the
+// year's budget as its sales are of the year's sales (one Cost per Revenue
+// for every month), as the server splits it.
+export const followSales = (total, sales) => splitByWeight(total, sales);
+
+// The budget months an update would leave, given the sales plan it makes:
+// 'even' follows the new sales over all 12; 'remaining' keeps the months
+// before `from` and lets the rest follow their new sales.
+export function planBudget(current, total, salesValues, split, from) {
+  if (!salesValues) return { values: null, past: 0, rest: total };
+  const cut = split === 'even' ? 0 : (from ?? 1) - 1;
+  const past = current.slice(0, cut).reduce((a, v) => a + v, 0);
+  const rest = total - past;
+  if (rest < 0) return { values: null, past, rest };
+  return { values: [...current.slice(0, cut), ...followSales(rest, salesValues.slice(cut))], past, rest };
+}

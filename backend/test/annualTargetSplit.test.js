@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { __test } from '../src/services/annualTargetService.js';
 
-const { splitEqual, splitByWeight, runningMonth } = __test;
+const { splitEqual, splitByWeight, runningMonth, followSales } = __test;
 const sum = (a) => a.reduce((x, y) => x + y, 0);
 
 test('splitEqual: 12 months add up exactly to the year', () => {
@@ -43,4 +43,13 @@ test('runningMonth: Jakarta month this year, January ahead, none for a past year
   assert.equal(runningMonth(2026, now), 11);
   assert.equal(runningMonth(2027, now), 1);
   assert.equal(runningMonth(2025, now), null);
+});
+
+test('followSales: the budget keeps the same Cost per Revenue every month', () => {
+  // Target 100 jt, 200 jt, 150 jt (450 jt) at 10% → 10 jt, 20 jt, 15 jt, not 15 jt each.
+  assert.deepEqual(followSales(45_000_000, [100_000_000, 200_000_000, 150_000_000]), [10_000_000, 20_000_000, 15_000_000]);
+  const sales = [330_833_333, 250_000_000, 400_000_007, 0, 120_000_000];
+  const budget = followSales(97_000_001, sales);
+  assert.equal(sum(budget), 97_000_001);
+  assert.equal(budget[3], 0);
 });

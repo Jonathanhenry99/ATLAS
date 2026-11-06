@@ -337,8 +337,9 @@ export default function DailyTrackingPage() {
         </div>
       ) : view === 'target' ? (
         <div className="bt-view" key="target">
-          <AnnualPlan brandId={brandId} month={month} canEdit={canEditSpend} onSaved={() => setTargetRefresh((n) => n + 1)} />
-          <TargetBudget brandId={brandId} month={month} grid={grid} channels={channels} canEdit={canEditSpend} refreshKey={targetRefresh} />
+          <AnnualPlan brandId={brandId} month={month} canEdit={canEditSpend} onSaved={() => setTargetRefresh((n) => n + 1)}>
+            <TargetBudget brandId={brandId} month={month} grid={grid} channels={channels} canEdit={canEditSpend} refreshKey={targetRefresh} />
+          </AnnualPlan>
         </div>
       ) : (
         <div className="bt-view" key="input">

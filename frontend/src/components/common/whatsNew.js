@@ -26,6 +26,14 @@ export const SHOW_FOR_DAYS = 60;
 
 export const WHATS_NEW = [
   {
+    id: 'annual-plan-compare',
+    released: '2026-11-05',
+    path: '/brand-tracking',
+    target: '[data-feature="plan-adjustment"]',
+    title: 'Rencana tahunan: adjustment, realisasi, target awal',
+    body: 'Target & Budget kini berbentuk lembar per bulan seperti spreadsheet: target adjustment, realisasi (achievement, gap, to be chased, CPR riil), dan target awal. Pembagian diatur langsung di tabel dengan % atau nominal, dan budget bisa mengikuti target lewat % alokasi.',
+  },
+  {
     id: 'shopee-sales-contribution',
     released: '2026-11-05',
     path: '/report-generator',

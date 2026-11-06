@@ -246,7 +246,7 @@ export default function AnnualTargetCard({ brandId, canEdit }) {
               <header className="at-editor-head">
                 <span className="at-eyebrow">{form.mode === 'create' ? `Target ${year}` : `Update target ${year}`}</span>
                 <p>{form.mode === 'create'
-                  ? 'Angka ini jadi target awal dan dibagi rata ke 12 bulan. Pembagiannya bisa diatur di Brand Tracking.'
+                  ? 'Angka ini jadi target awal (rencana sebelum tahun berjalan) dan dibagi rata ke 12 bulan. Pembagiannya bisa diatur di Brand Tracking sampai ada update pertama.'
                   : 'Isi angka baru. Setelah ini Anda memilih cara membaginya ke bulan — target awal tetap tersimpan.'}</p>
               </header>
               <div className="at-editor-grid">
@@ -268,7 +268,7 @@ export default function AnnualTargetCard({ brandId, canEdit }) {
               {createSplit && (
                 <div className="at-editor-preview">
                   <MonthBars values={createSplit} height={56} />
-                  <p>±{fmtRp(createSplit[0])} sales{draftSpend > 0 ? ` · ±${fmtRp(splitEqual(draftSpend)[0])} budget` : ''} per bulan. <b>Pastikan ini angka setahun, bukan sebulan.</b> Target bulanan {year} yang sudah ada diganti; alokasi channel tetap.</p>
+                  <p>±{fmtRp(createSplit[0])} sales{draftSpend > 0 ? ` · ±${fmtRp(splitEqual(draftSpend)[0])} budget` : ''} per bulan.{draftSpend > 0 ? ` Budget tiap bulan mengikuti targetnya (${pct(draftSpend / Number(form.sales), 2)} dari target bulan itu), jadi tetap ikut kalau pembagian target diubah.` : ''} <b>Pastikan ini angka setahun, bukan sebulan.</b> Target bulanan {year} yang sudah ada diganti; alokasi channel tetap.</p>
                 </div>
               )}
               {invalid && (form.sales !== '' || form.mode === 'update') && <p className="at-hint">{invalid}</p>}
@@ -298,7 +298,7 @@ export default function AnnualTargetCard({ brandId, canEdit }) {
             <motion.div key="hero" className="at-hero" {...swap} transition={{ duration: 0.22, ease }}>
               <div className="at-hero-main">
                 <div className="at-hero-top">
-                  <span className="at-eyebrow">Target sales {year}</span>
+                  <span className="at-eyebrow">{updates > 0 ? `Target adjustment ${year}` : `Target sales ${year}`}</span>
                   <span className="at-hero-avg">±{fmtRpShort(annual.targetSales / 12)} / bulan</span>
                 </div>
                 <strong className="at-hero-num">{fmtRp(annual.targetSales)}</strong>
@@ -352,13 +352,15 @@ export default function AnnualTargetCard({ brandId, canEdit }) {
             <header className="at-panel-head">
               <h4>Pembagian per bulan</h4>
               <div className="at-legend">
-                <span><i className="is-target" /> Target</span>
+                {updates > 0 && <span><i className="is-ghost" /> Target awal</span>}
+                <span><i className="is-target" /> {updates > 0 ? 'Target adjustment' : 'Target'}</span>
                 <span><i className="is-real" /> Realisasi</span>
               </div>
-              <button type="button" className="at-link" onClick={openTracking}>Atur di Brand Tracking <ArrowUpRight size={13} aria-hidden="true" /></button>
+              <button type="button" className="at-link" onClick={openTracking}>Bandingkan & atur di Brand Tracking <ArrowUpRight size={13} aria-hidden="true" /></button>
             </header>
             <MonthBars
               values={data.months.map((m) => m.targetSales ?? 0)}
+              ghost={updates > 0 ? data.months.map((m) => m.initialSales ?? 0) : null}
               actual={data.months.map((m) => m.actualSales)}
               currentIdx={currentIdx}
               doneBefore={year < thisYear ? 12 : Math.max(currentIdx, 0)}
@@ -368,9 +370,10 @@ export default function AnnualTargetCard({ brandId, canEdit }) {
                 return (
                   <>
                     <b>{MONTH_LONG[i]} {year}</b>
-                    <span>Target {fmtRpShort(m.targetSales)}</span>
+                    {updates > 0 && m.initialSales != null && <span>Target awal {fmtRpShort(m.initialSales)}</span>}
+                    <span>{updates > 0 ? 'Adjustment' : 'Target'} {fmtRpShort(m.targetSales)}</span>
                     <span>Realisasi {m.actualSales != null ? fmtRpShort(m.actualSales) : '—'}{m.actualSales != null && m.targetSales ? ` · ${pct(m.actualSales / m.targetSales, 0)}` : ''}</span>
-                    {m.targetSpend != null && <small>Budget {fmtRpShort(m.targetSpend)}</small>}
+                    {m.targetSpend != null && <small>Budget {fmtRpShort(m.targetSpend)} · CPR {pct(m.targetSales ? m.targetSpend / m.targetSales : null, 1)}</small>}
                   </>
                 );
               }}
