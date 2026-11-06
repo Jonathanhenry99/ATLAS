@@ -17,7 +17,7 @@ import { fromISODate, toISODate } from '../../lib/dateFmt';
 import { parseShopeeCSV } from '../../lib/shopeeAds';
 import { categorizeProdukRows, mergeProdukOtomatis, mergeProductMaster, parseProductMasterRows, splitArchivedProduk, type ProductMasterEntry } from '../../lib/shopeeDeepDive';
 import { comparePeriodDays, daysBetweenInclusive, emptyParsedPeriod, type ParsedPeriod } from '../../lib/periodLabel';
-import { omzetFromOverview, omzetFromShopStats, periodFromOverviewFilename } from '../../lib/shopeeOverview';
+import { addShopStats, omzetFromOverview, periodFromOverviewFilename, shopStatsFromShopStats, type ShopStats } from '../../lib/shopeeOverview';
 import type { SheetRow } from '../../lib/types';
 import { requireColumns, validateFileBasics } from '../../lib/validation';
 import { readSpreadsheetFile } from '../../lib/xlsxUtils';
@@ -306,6 +306,20 @@ export function ShopeeTab({ isActive, clientId, omzetOld, omzetCur, onOmzetOldCh
   type OmzetSource = 'toko' | 'overview' | null;
   const [omzetAuto, setOmzetAuto] = useState<Record<PeriodRole, OmzetSource>>({ old: null, cur: null });
   const [omzetReading, setOmzetReading] = useState<PeriodRole | null>(null);
+  // Each side's Performa Toko read — cancelled / returned orders and
+  // Shopee's own ads sales, for Kontribusi Penjualan. Kept apart from Total
+  // Omzet: a typed-in omzet does not make the file's cancellations wrong.
+  const [shopStats, setShopStats] = useState<Record<PeriodRole, ShopStats | null>>({ old: null, cur: null });
+
+  // A month's Performa Toko file(s), read and added up; null when none of
+  // them is a Performa Toko export.
+  async function readShopStatsFiles(files: LibraryFileMeta[]): Promise<ShopStats | null> {
+    if (!clientId) return null;
+    const brandId = clientId;
+    const parts = await Promise.all(files.map((f) => downloadLibraryFile(brandId, f)));
+    const reads = await Promise.all(parts.map(async (f) => shopStatsFromShopStats(await f.arrayBuffer())));
+    return addShopStats(reads.filter((v): v is ShopStats => v !== null));
+  }
 
   // Product Performance (both of its sheets) for one period, from library files.
   async function loadProductPerf(brandId: number, targetRole: PeriodRole, perfList: LibraryFileMeta[]) {
@@ -384,17 +398,17 @@ export function ShopeeTab({ isActive, clientId, omzetOld, omzetCur, onOmzetOldCh
       // Total Omzet: the month's Performa Toko file first (the shop's own
       // total), then its Product Overview, then a report already Generated.
       let tokoOmzet: number | null = null;
+      let tokoStats: ShopStats | null = null;
       const tokoList = byChannel.get('performance_overview') ?? [];
       if (tokoList.length) {
         try {
-          const parts = await downloadAll(tokoList);
-          const values = await Promise.all(parts.map(async (f) => omzetFromShopStats(await f.arrayBuffer())));
-          const found = values.filter((v): v is number => v !== null);
-          tokoOmzet = found.length ? found.reduce((a, b) => a + b, 0) : null;
+          tokoStats = await readShopStatsFiles(tokoList);
+          tokoOmzet = tokoStats && tokoStats.gmv > 0 ? tokoStats.gmv : null;
         } catch {
           /* fall through to the Product Overview figure */
         }
       }
+      setShopStats((prev) => ({ ...prev, [targetRole]: tokoStats }));
       let omzetValue: number | null = tokoOmzet ?? overviewOmzet;
       if (omzetValue === null) try {
         const saved = await getSavedPeriods(clientId, 'shopee');
@@ -477,6 +491,17 @@ export function ShopeeTab({ isActive, clientId, omzetOld, omzetCur, onOmzetOldCh
           (f) => f.platform === 'shopee' && f.channel === 'product_performance' && f.period_month?.slice(0, 7) === month,
         );
         await loadProductPerf(clientId, targetRole, perfList);
+        // Reports saved before Kontribusi Penjualan existed carry no
+        // Performa Toko read; the library's file for the month stands in.
+        const savedStats = (detail.reportConfig as { shopStatsOld?: ShopStats | null; shopStatsCur?: ShopStats | null } | null)?.[period.role === 'old' ? 'shopStatsOld' : 'shopStatsCur'] ?? null;
+        let stats = savedStats;
+        if (!stats) {
+          const tokoList = (data.files as LibraryFileMeta[]).filter(
+            (f) => f.platform === 'shopee' && f.channel === 'performance_overview' && f.period_month?.slice(0, 7) === month,
+          );
+          stats = tokoList.length ? await readShopStatsFiles(tokoList).catch(() => null) : null;
+        }
+        setShopStats((prev) => ({ ...prev, [targetRole]: stats }));
       }
 
       (targetRole === 'old' ? periodOld : periodCur).autoFill(detail.period.label);
@@ -530,6 +555,7 @@ export function ShopeeTab({ isActive, clientId, omzetOld, omzetCur, onOmzetOldCh
     setProductPerfFiles((prev) => ({ ...prev, [role]: null }));
     (role === 'old' ? onOmzetOldChange : onOmzetCurChange)(null);
     setOmzetAuto((prev) => ({ ...prev, [role]: null }));
+    setShopStats((prev) => ({ ...prev, [role]: null }));
     setReport(null);
     setDeepDive(null);
     setFunnelReport(null);
@@ -817,6 +843,8 @@ export function ShopeeTab({ isActive, clientId, omzetOld, omzetCur, onOmzetOldCh
       produkOtomatisCur: adsFiles['produk-otomatis-cur']?.rows ?? [],
       produkIndividualOld: adsFiles['produk-old']?.rows ?? [],
       produkOtomatisOld: adsFiles['produk-otomatis-old']?.rows ?? [],
+      shopStatsOld: shopStats.old,
+      shopStatsCur: shopStats.cur,
     });
     // Only default the open tab — Performance Overall when Product Performance
     // is there, else the dominant channel — on the very first
@@ -912,7 +940,7 @@ export function ShopeeTab({ isActive, clientId, omzetOld, omzetCur, onOmzetOldCh
 
     return {
       period: { oldStart: periodOldRange.start, oldEnd: periodOldRange.end, curStart: periodCurRange.start, curEnd: periodCurRange.end, oldLabel: periodOld.label, curLabel: periodCur.label },
-      reportConfig: { omzetOld: omzetOld ?? 0, omzetCur: omzetCur ?? 0 },
+      reportConfig: { omzetOld: omzetOld ?? 0, omzetCur: omzetCur ?? 0, shopStatsOld: shopStats.old, shopStatsCur: shopStats.cur },
       rows: {
         shopee: [
           ...mapShopeeRows(produkMergedOld, 'produk', 'old', catMapOld),
@@ -1018,10 +1046,12 @@ export function ShopeeTab({ isActive, clientId, omzetOld, omzetCur, onOmzetOldCh
     setOmzetReading(role);
     setUploadError(null);
     try {
-      const omzet = omzetFromShopStats(await file.arrayBuffer());
+      const stats = shopStatsFromShopStats(await file.arrayBuffer());
+      const omzet = stats && stats.gmv > 0 ? stats.gmv : null;
       if (omzet === null) throw new Error('sheet "Pesanan Dibuat" dengan kolom Total Penjualan tidak ditemukan — pastikan ini file Performa Toko (shop-stats) dari Seller Centre.');
       (role === 'old' ? onOmzetOldChange : onOmzetCurChange)(omzet);
       setOmzetAuto((prev) => ({ ...prev, [role]: 'toko' }));
+      setShopStats((prev) => ({ ...prev, [role]: stats }));
       setReport(null);
       setDeepDive(null);
       setFunnelReport(null);

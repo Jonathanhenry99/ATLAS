@@ -581,6 +581,30 @@
   .chan-eff-good{background:var(--good-100);color:var(--good)}
   .chan-eff-bad{background:var(--bad-100);color:var(--bad)}
   .chan-eff-neutral{background:var(--s2);color:var(--muted)}
+  /* ── Kontribusi Penjualan: ads vs non-ads, sales quality, channels ────── */
+  .sc-body{padding:1rem 1.4rem 1.4rem}
+  .sc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.4rem;align-items:start}
+  .sc-grid.is-single{grid-template-columns:minmax(0,1fr)}
+  @media (max-width:1100px){.sc-grid{grid-template-columns:minmax(0,1fr)}}
+  .sc-part{min-width:0}
+  .sc-body > .sc-part{margin-top:1.6rem;padding-top:1.4rem;border-top:1px solid var(--border)}
+  .sc-part-title{display:flex;align-items:baseline;gap:.5rem;margin-bottom:.8rem;font-size:.8rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+  .sc-part-title span{font-size:.75rem;font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted)}
+  .sc-bar-row{display:grid;grid-template-columns:8.5rem minmax(0,1fr);align-items:center;gap:.75rem;margin-bottom:.6rem}
+  .sc-bar-label{font-size:.78rem;font-weight:800;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sc-bar{height:30px}
+  .sc-bar-empty{display:flex;align-items:center;padding:0 .8rem;border:1px dashed var(--border);border-radius:9px;font-size:.76rem;color:var(--muted)}
+  .sc-bar-empty.is-over{border-color:var(--bad);color:var(--bad);background:var(--bad-100)}
+  .sc-seg-organic{background:repeating-linear-gradient(135deg,#e4e8f0 0 6px,#d8dde8 6px 12px);color:#334155}
+  .chan-legend-dot.sc-seg-organic{background:#d8dde8}
+  .sc-table{width:100%;margin-top:.9rem}
+  .sc-table th:first-child,.sc-table td:first-child{text-align:left}
+  .sc-table th,.sc-table td:first-child{white-space:nowrap}
+  .sc-table tr.sc-strong td{font-weight:800;color:var(--text)}
+  .sc-table tr.sc-sub td:first-child{padding-left:1.4rem;color:var(--muted)}
+  .sc-warn{margin-bottom:1rem;padding:.8rem 1rem;border:1px solid rgba(185,28,28,.25);border-left:3px solid var(--bad);border-radius:11px;background:var(--bad-100);font-size:.84rem;line-height:1.5;color:var(--text)}
+  .sc-warn.is-soft{border-color:var(--border);border-left-color:var(--muted);background:var(--s2)}
+  .sc-note{padding-top:.7rem}
   /* ── Symptom Analysis: summary callout ──────────────────────────────────── */
   .sec-split + .sympt-summary{margin-top:1.3rem}
   .sympt-summary{

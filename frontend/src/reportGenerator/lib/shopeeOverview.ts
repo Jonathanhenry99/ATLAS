@@ -170,30 +170,105 @@ export function omzetFromOverview(rows: SheetRow[]): number | null {
   return total > 0 ? Math.round(total) : null;
 }
 
-// Total Omzet Toko from Shopee's Performa Toko export ("…shopee-shop-stats…",
-// Pengaturan Brand › Performance Overview): its "Pesanan Dibuat" sheet opens
-// with the period's own total line ("01-08-2026-31-08-2026 | Total Penjualan
-// (IDR) …") above the daily rows. That line is read as is; without it the
-// daily rows are summed. Null when the file is not a Performa Toko export.
-export function omzetFromShopStats(buffer: ArrayBuffer): number | null {
+// What a month's Performa Toko export says about the shop's own sales, all
+// on the "Pesanan Dibuat" basis — the same one Shopee's ads report counts
+// its GMV on (an order is credited when placed, even if later cancelled):
+// the total, and how much of it was cancelled or returned. `adsSales` is
+// the shop's own "Penjualan dari Iklan Shopee" (sheet "Asal Kunjungan"),
+// null when the export has no such sheet.
+export interface ShopStats {
+  gmv: number;
+  orders: number;
+  cancelledOrders: number;
+  cancelledSales: number;
+  returnedOrders: number;
+  returnedSales: number;
+  adsSales: number | null;
+}
+
+const SHOP_RANGE_ROW = /^\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d{4}$/;
+const SHOP_DAY_ROW = /^\d{2}-\d{2}-\d{4}$/;
+
+// The period's rows of a Performa Toko sheet: its own total line
+// ("01-08-2026-31-08-2026 | …") when the export opens with one, else every
+// daily row (summed by the caller).
+function shopPeriodRows(aoa: unknown[][], head: number): unknown[][] {
+  const first = aoa[head + 1];
+  if (first && SHOP_RANGE_ROW.test(String(first[0]).trim())) return [first];
+  const out: unknown[][] = [];
+  for (let i = head + 1; i < aoa.length; i++) {
+    if (!SHOP_DAY_ROW.test(String(aoa[i][0]).trim())) break;
+    out.push(aoa[i]);
+  }
+  return out;
+}
+
+// Shopee's Performa Toko export ("…shopee-shop-stats…", Pengaturan Brand ›
+// Performance Overview), read off its "Pesanan Dibuat" sheet. Null when the
+// file is not a Performa Toko export.
+export function shopStatsFromShopStats(buffer: ArrayBuffer): ShopStats | null {
   const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
   const name = wb.SheetNames.find((n) => n.trim().toLowerCase() === 'pesanan dibuat');
   if (!name) return null;
   const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, defval: '' });
   const head = aoa.findIndex((r) => String(r[0]).trim().toLowerCase() === 'tanggal' && r.some((c) => /total penjualan/i.test(String(c))));
   if (head < 0) return null;
-  const col = aoa[head].findIndex((c) => /total penjualan/i.test(String(c)));
-  const first = aoa[head + 1];
-  const isRange = (v: unknown) => /^\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d{4}$/.test(String(v).trim());
-  if (first && isRange(first[0])) {
-    const v = parseOverviewNum(first[col]);
-    return v > 0 ? Math.round(v) : null;
+  const cols = aoa[head].map((c) => String(c).trim().toLowerCase());
+  const at = (re: RegExp) => cols.findIndex((c) => re.test(c));
+  const rows = shopPeriodRows(aoa, head);
+  const sum = (re: RegExp) => {
+    const i = at(re);
+    return i < 0 ? 0 : Math.round(rows.reduce((t, r) => t + parseOverviewNum(r[i]), 0));
+  };
+  const stats: ShopStats = {
+    gmv: sum(/^total penjualan/),
+    orders: sum(/^total pesanan$/),
+    cancelledOrders: sum(/^pesanan dibatalkan$/),
+    cancelledSales: sum(/^penjualan dibatalkan$/),
+    returnedOrders: sum(/^pesanan dikembalikan$/),
+    returnedSales: sum(/^penjualan dikembalikan$/),
+    adsSales: null,
+  };
+
+  // "Asal Kunjungan (pesanan yang …)": one line per order status; the
+  // "Pesanan Dibuat" line's "Penjualan dari Iklan Shopee".
+  const origin = wb.SheetNames.find((n) => /^asal kunjungan/i.test(n.trim()));
+  if (origin) {
+    const o = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[origin], { header: 1, defval: '' });
+    const oh = o.findIndex((r) => String(r[0]).trim().toLowerCase() === 'tanggal');
+    if (oh >= 0) {
+      const oc = o[oh].map((c) => String(c).trim().toLowerCase());
+      const statusCol = oc.findIndex((c) => c === 'status pesanan');
+      const adsCol = oc.findIndex((c) => /iklan shopee/.test(c));
+      if (statusCol >= 0 && adsCol >= 0) {
+        const made = o.slice(oh + 1).filter((r) => /pesanan dibuat/i.test(String(r[statusCol])));
+        const ranged = made.filter((r) => SHOP_RANGE_ROW.test(String(r[0]).trim()));
+        const lines = ranged.length ? ranged : made.filter((r) => SHOP_DAY_ROW.test(String(r[0]).trim()));
+        if (lines.length) stats.adsSales = Math.round(lines.reduce((t, r) => t + parseOverviewNum(r[adsCol]), 0));
+      }
+    }
   }
-  let total = 0;
-  for (let i = head + 1; i < aoa.length; i++) {
-    const r = aoa[i];
-    if (!/^\d{2}-\d{2}-\d{4}$/.test(String(r[0]).trim())) break;
-    total += parseOverviewNum(r[col]);
-  }
-  return total > 0 ? Math.round(total) : null;
+  return stats;
+}
+
+// Several parts of one month (a Performa Toko exported in pieces) as one.
+export function addShopStats(parts: ShopStats[]): ShopStats | null {
+  if (!parts.length) return null;
+  const ads = parts.map((p) => p.adsSales).filter((v): v is number => v !== null);
+  return {
+    gmv: parts.reduce((t, p) => t + p.gmv, 0),
+    orders: parts.reduce((t, p) => t + p.orders, 0),
+    cancelledOrders: parts.reduce((t, p) => t + p.cancelledOrders, 0),
+    cancelledSales: parts.reduce((t, p) => t + p.cancelledSales, 0),
+    returnedOrders: parts.reduce((t, p) => t + p.returnedOrders, 0),
+    returnedSales: parts.reduce((t, p) => t + p.returnedSales, 0),
+    adsSales: ads.length === parts.length ? ads.reduce((t, v) => t + v, 0) : null,
+  };
+}
+
+// Total Omzet Toko from a Performa Toko export: its "Pesanan Dibuat"
+// total. Null when the file is not one, or shows no sales.
+export function omzetFromShopStats(buffer: ArrayBuffer): number | null {
+  const stats = shopStatsFromShopStats(buffer);
+  return stats && stats.gmv > 0 ? stats.gmv : null;
 }

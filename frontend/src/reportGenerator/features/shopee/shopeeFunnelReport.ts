@@ -10,6 +10,7 @@ import {
   type FunnelValueRow,
 } from '../../lib/shopeeFunnel';
 import { buildSymptomSummary, type SymptomSummary } from '../../lib/shopeeFunnelSummary';
+import type { ShopStats } from '../../lib/shopeeOverview';
 import {
   buildChannelAnalyses,
   buildProductAdsSplit,
@@ -91,6 +92,25 @@ export interface BuildShopeeFunnelReportInput {
   // (a reconstructed report only has them merged) → no split.
   produkIndividualOld?: SheetRow[];
   produkOtomatisOld?: SheetRow[];
+  // Each month's Performa Toko read (cancelled / returned, Shopee's own ads
+  // sales); null when that month has no Performa Toko file.
+  shopStatsOld?: ShopStats | null;
+  shopStatsCur?: ShopStats | null;
+}
+
+// One month of "Kontribusi Penjualan": the shop's total (Total Omzet, on
+// the Pesanan Dibuat basis), what the ads brought in (every channel's
+// "Omzet Penjualan"), and the Performa Toko read when there is one.
+export interface SalesContributionSide {
+  shopGmv: number;
+  adsGmv: number;
+  adsSpend: number;
+  byChannel: { key: ChannelMixEntry['key']; label: string; color: string; gmv: number }[];
+  stats: ShopStats | null;
+}
+export interface SalesContribution {
+  old: SalesContributionSide;
+  cur: SalesContributionSide;
 }
 
 // One ad channel's current-period contribution — feeds the "Kontribusi Antar
@@ -98,7 +118,9 @@ export interface BuildShopeeFunnelReportInput {
 // effectiveness signal is the efficiency index (GMV share ÷ spend share),
 // which is robust to a channel with tiny spend catching one big order.
 export interface ChannelMixEntry {
-  key: 'produk' | 'toko' | 'live';
+  // Iklan Produk is split in two when both its files are at hand: the ads
+  // made per product (Individu) and Shopee's auto campaign (Otomatis).
+  key: 'produk' | 'produk_individu' | 'produk_otomatis' | 'toko' | 'live';
   label: string;
   color: string;
   spend: number;
@@ -137,6 +159,9 @@ export interface ShopeeFunnelReport {
   atcNote: string | null;
   // Current-period spend/GMV per ad channel (only channels with data).
   channelMix: ChannelMixEntry[];
+  // Ads vs non-ads share of the shop's sales, and its cancelled / returned
+  // part, for both months.
+  sales: SalesContribution;
   // Iklan Live GMV, shown as a footnote outside the funnel tree (Live has no
   // impression/click columns so it can't join the tree, but its revenue
   // shouldn't vanish from view).
@@ -196,10 +221,29 @@ export function buildShopeeFunnelReport(input: BuildShopeeFunnelReportInput): Sh
   // when the user uploaded that channel. Live GMV uses the same "Omzet
   // Penjualan" column sumLiveGmv reads.
   const produkCurSums = sumFunnelChannel(input.produkCur);
+  const produkSplit =
+    input.produkIndividualOld && input.produkIndividualCur
+      ? buildProductAdsSplit(input.produkIndividualOld, input.produkIndividualCur, input.produkOtomatisOld ?? [], input.produkOtomatisCur ?? [])
+      : null;
+  // Iklan Produk's two halves for one period — null when the auto campaign
+  // did not run (or the split is not at hand), so it stays one channel.
+  const produkHalves = (role: 'old' | 'cur') => {
+    if (!produkSplit) return null;
+    const auto = produkSplit.auto[role];
+    if (!(auto.spend > 0 || auto.gmv > 0)) return null;
+    const ind = produkSplit.individual[role];
+    return [
+      { key: 'produk_individu' as const, label: 'Produk · Individu', color: '#c93b1c', spend: ind.spend, gmv: ind.gmv },
+      { key: 'produk_otomatis' as const, label: 'Produk · Otomatis', color: '#4f46e5', spend: auto.spend, gmv: auto.gmv },
+    ];
+  };
   // Segment fills carry a white percentage label, so they are the platform hues
   // one step darker: #ee4d2d and #0d9488 put white at 3.66:1 and 3.74:1, which
   // fails AA at the 11px the label renders at.
-  const channelMix: ChannelMixEntry[] = [mixEntry('produk', 'Iklan Produk', '#c93b1c', produkCurSums.spend, produkCurSums.gmv)];
+  const halvesCur = produkHalves('cur');
+  const channelMix: ChannelMixEntry[] = halvesCur
+    ? halvesCur.map((h) => mixEntry(h.key, h.label, h.color, h.spend, h.gmv))
+    : [mixEntry('produk', 'Iklan Produk', '#c93b1c', produkCurSums.spend, produkCurSums.gmv)];
   if (input.tokoOld.length || input.tokoCur.length) {
     const t = sumFunnelChannel(input.tokoCur);
     channelMix.push(mixEntry('toko', 'Iklan Toko', '#0f766e', t.spend, t.gmv));
@@ -207,6 +251,23 @@ export function buildShopeeFunnelReport(input: BuildShopeeFunnelReportInput): Sh
   if (input.liveOld.length || input.liveCur.length) {
     channelMix.push(mixEntry('live', 'Iklan Live', '#7c3aed', sumFunnelChannel(input.liveCur).spend, liveCurGmv));
   }
+
+  const salesSide = (role: 'old' | 'cur', produk: SheetRow[], toko: SheetRow[], live: SheetRow[], liveGmv: number, shopGmv: number, stats: ShopStats | null | undefined): SalesContributionSide => {
+    const p = sumFunnelChannel(produk);
+    const t = sumFunnelChannel(toko);
+    const l = sumFunnelChannel(live);
+    const halves = produkHalves(role);
+    const byChannel = [
+      ...(halves ? halves.map(({ key, label, color, gmv }) => ({ key, label, color, gmv })) : [{ key: 'produk' as const, label: 'Iklan Produk', color: '#c93b1c', gmv: p.gmv }]),
+      { key: 'toko' as const, label: 'Iklan Toko', color: '#0f766e', gmv: t.gmv },
+      { key: 'live' as const, label: 'Iklan Live', color: '#7c3aed', gmv: liveGmv },
+    ].filter((c) => c.gmv > 0);
+    return { shopGmv, adsGmv: p.gmv + t.gmv + liveGmv, adsSpend: p.spend + t.spend + l.spend, byChannel, stats: stats ?? null };
+  };
+  const sales: SalesContribution = {
+    old: salesSide('old', input.produkOld, input.tokoOld, input.liveOld, liveOldGmv, input.omzetOld, input.shopStatsOld),
+    cur: salesSide('cur', input.produkCur, input.tokoCur, input.liveCur, liveCurGmv, input.omzetCur, input.shopStatsCur),
+  };
 
   // A channel only earns a tree if it actually reports the funnel columns —
   // Iklan Live normally reports viewers, not impressions/clicks, and an
@@ -255,6 +316,7 @@ export function buildShopeeFunnelReport(input: BuildShopeeFunnelReportInput): Sh
     symptom: buildSymptomSummary(mOld, mCur),
     atcNote: atcCoverageNote(sumsOld, sumsCur, 'Iklan Produk Otomatis, Shop+ Ads, dan iklan yang menulis "-" di kolom ATC'),
     channelMix: channelMix.filter((e) => e.spend > 0 || e.gmv > 0),
+    sales,
     liveGmv: { old: liveOldGmv, cur: liveCurGmv, hasData: liveOldGmv > 0 || liveCurGmv > 0 },
     pareto: buildPareto(paretoRecords),
     traffic: buildProductRankings(perfOld, perfCur, TRAFFIC_METRIC_DEFS),
@@ -265,10 +327,7 @@ export function buildShopeeFunnelReport(input: BuildShopeeFunnelReportInput): Sh
     unadvertised: buildUnadvertisedProducts(input.productPerfCur, input.produkIndividualCur ?? input.produkCur, input.produkOtomatisCur ?? [], 60),
     channelAnalyses,
     roiRoot: buildRoiRoot(channelAnalyses),
-    produkSplit:
-      input.produkIndividualOld && input.produkIndividualCur
-        ? buildProductAdsSplit(input.produkIndividualOld, input.produkIndividualCur, input.produkOtomatisOld ?? [], input.produkOtomatisCur ?? [])
-        : null,
+    produkSplit,
     hasVisitorsCol: input.productPerfCur ? hasVisitorsCol(input.productPerfCur) : false,
     paretoAvailableMonths: [...new Set(allMonths.map((m) => m.month))].sort(),
   };

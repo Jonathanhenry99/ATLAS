@@ -26,6 +26,14 @@ export const SHOW_FOR_DAYS = 60;
 
 export const WHATS_NEW = [
   {
+    id: 'shopee-sales-contribution',
+    released: '2026-11-05',
+    path: '/report-generator',
+    target: '.panel.active [data-feature="sales-contribution"]',
+    title: 'Kontribusi Penjualan: iklan vs non-iklan',
+    body: 'Laporan Shopee kini menunjukkan berapa persen penjualan toko dari iklan dan non-iklan per bulan, cancel & return rate dari Performa Toko, serta Iklan Produk yang dipisah Individu dan Otomatis.',
+  },
+  {
     id: 'brand-switch-logo',
     released: '2026-11-05',
     path: '/data-brand',

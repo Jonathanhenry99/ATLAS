@@ -9,6 +9,7 @@ import { daysBetweenInclusive } from '../../lib/periodLabel';
 import { splitArchivedProduk, type ProductMasterEntry } from '../../lib/shopeeDeepDive';
 import type { DailyTrendMetricSelection } from '../../lib/shopeeDeepDiveInsights';
 import type { MetricSelection } from '../../lib/shopeeDeepDiveItemPivot';
+import type { ShopStats } from '../../lib/shopeeOverview';
 import type { SheetRow } from '../../lib/types';
 import type { ReportDetail } from './types';
 
@@ -103,7 +104,7 @@ export function reconstructShopeeDeepDive(detail: ReportDetail, productMaster: P
 export function reconstructShopeeFunnel(detail: ReportDetail): ShopeeFunnelReport {
   const { report, rows } = detail;
   const byChannelRole = (channel: string, role: string) => rows.filter((r) => r.channel === channel && r.period_role === role).map((r) => extraOf(r));
-  const config = (report.reportConfig ?? {}) as { omzetOld?: number; omzetCur?: number };
+  const config = (report.reportConfig ?? {}) as { omzetOld?: number; omzetCur?: number; shopStatsOld?: ShopStats | null; shopStatsCur?: ShopStats | null };
   // Saved merged; split back into individual ads and the auto campaign.
   const splitOld = splitArchivedProduk(byChannelRole('produk', 'old'));
   const splitCur = splitArchivedProduk(byChannelRole('produk', 'cur'));
@@ -124,6 +125,8 @@ export function reconstructShopeeFunnel(detail: ReportDetail): ShopeeFunnelRepor
     productPerfCur: null,
     tokoKeywordOld: byChannelRole('toko_keyword', 'old'),
     tokoKeywordCur: byChannelRole('toko_keyword', 'cur'),
+    shopStatsOld: config.shopStatsOld ?? null,
+    shopStatsCur: config.shopStatsCur ?? null,
   });
 }
 

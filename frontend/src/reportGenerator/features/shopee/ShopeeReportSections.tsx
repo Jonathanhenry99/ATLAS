@@ -14,7 +14,7 @@ import { ChannelEmptySection, ChannelParetoSection, PotentialItemsSection, Produ
 import { fmtPivotVal } from '../../lib/shopeeDeepDivePivot';
 import './shopeeReport.css';
 import { SHOPEE_CHANNELS, type ChannelAnalysis } from '../../lib/shopeeChannelAnalysis';
-import { ChannelContributionSection } from './ChannelContributionSection';
+import { SalesContributionSection } from './SalesContributionSection';
 import type { ShopeeDeepDiveReport } from './shopeeDeepDiveReport';
 import type { ShopeeFunnelReport } from './shopeeFunnelReport';
 import type { ShopeeReport } from './shopeeReport';
@@ -172,7 +172,7 @@ export function ShopeeReportSections({
           {funnelReport && (
             <FundamentalAnalysisSection values={funnelReport.values} atcNote={funnelReport.atcNote} liveGmv={funnelReport.liveGmv} tree={funnelReport.tree} symptom={funnelReport.symptom} p1={p1} p2={p2} />
           )}
-          {funnelReport && funnelReport.channelMix.length > 0 && <ChannelContributionSection mix={funnelReport.channelMix} periodLabel={p2} />}
+          {funnelReport && <SalesContributionSection sales={funnelReport.sales} mix={funnelReport.channelMix} p1={p1} p2={p2} />}
           {funnelReport && (
             <SectionGroup label="Penjualan toko · semua produk, bukan hanya iklan">
               {(['traffic', 'conversion'] as const).map((id) => {
